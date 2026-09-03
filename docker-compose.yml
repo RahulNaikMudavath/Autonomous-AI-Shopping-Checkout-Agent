@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # 1. FastAPI API Gateway & LangGraph Agent Supervisor
+  agentcart-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agentcart_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://agentcart:securepass@postgres:5432/agentcart_db
+      - REDIS_URL=redis://redis:6379/0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  # 2. React / Vite / Next.js User Interface
+  agentcart-ui:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile
+      target: frontend-builder
+    container_name: agentcart_frontend
+    ports:
+      - "3000:80"
+    restart: always
+
+  # 3. PostgreSQL 16 with pgvector Extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agentcart_postgres
+    environment:
+      POSTGRES_USER: agentcart
+      POSTGRES_PASSWORD: securepass
+      POSTGRES_DB: agentcart_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  # 4. Redis Ephemeral Cache & State Locks
+  redis:
+    image: redis:7.2-alpine
+    container_name: agentcart_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  # 5. OpenTelemetry Collector & Jaeger Tracing
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: agentcart_otel
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:

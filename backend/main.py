@@ -482,6 +482,18 @@ async def run_automated_benchmark():
     """Executes all 12 test cases against 120 simulated commerce workflows."""
     return AgentBenchmarkHarness.execute_all_12_test_cases()
 
+# -------------------------------------------------------------
+# 14. Supporting Infrastructure & Telemetry Endpoints
+# -------------------------------------------------------------
+from backend.infrastructure.telemetry_langfuse import (
+    InfrastructureManager, SupportingInfrastructureReport
+)
+
+@app.get("/api/infrastructure/status", response_model=SupportingInfrastructureReport)
+async def get_infrastructure_status():
+    """Retrieve the real-time status of all 7 supporting infrastructure components."""
+    return InfrastructureManager.get_infrastructure_status()
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -497,6 +509,7 @@ async def health_check():
         "memory": "4-Tier Architecture (Profile, Transactions, Working State, Vector DB)",
         "observability": "Operational Waterfall Execution Trace & Telemetry KPI Dashboard",
         "evaluation": "Automated Benchmark Suite (TC01-TC12 across 120+ Workflows)",
+        "infrastructure": "PostgreSQL, Redis, pgvector, OpenTelemetry, Langfuse, Docker, GitHub Actions",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }
