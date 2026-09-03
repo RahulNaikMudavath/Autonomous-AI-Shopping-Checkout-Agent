@@ -349,6 +349,30 @@ async def execute_sandbox_charge(req: SandboxChargeRequest):
     )
     return res
 
+# -------------------------------------------------------------
+# 8. Agent Security & Untrusted Content Sanitizer Endpoints
+# -------------------------------------------------------------
+from backend.trust_safety.untrusted_content_sanitizer import (
+    UntrustedContentSanitizer, SanitizationResult
+)
+
+class SanitizeContentRequest(BaseModel):
+    raw_content: str
+    merchant_name: Optional[str] = "Untrusted Merchant"
+    source_field: Optional[str] = "product_description"
+
+@app.post("/api/security/sanitize-content", response_model=SanitizationResult)
+async def sanitize_untrusted_content(req: SanitizeContentRequest):
+    """
+    Sanitizes untrusted merchant content, stripping indirect prompt injections
+    and preserving strict policy boundaries.
+    """
+    return UntrustedContentSanitizer.sanitize_merchant_content(
+        raw_text=req.raw_content,
+        merchant_name=req.merchant_name or "Untrusted Merchant",
+        source_field=req.source_field or "product_description"
+    )
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -359,6 +383,7 @@ async def health_check():
         "specialized_agents": ["Agent 1: Intent Agent", "Agent 2: Planning Agent", "Agent 3: Discovery Agent"],
         "merchant_apis": ["Merchant A (TechHub)", "Merchant B (ElectroBazaar)", "Merchant C (OmniStore)", "Merchant D (ProHardware)"],
         "payment_architecture": "Tokenized Delegated Authorization Sandbox (Zero Raw Card Storage)",
+        "security": "Untrusted Context Sanitizer & Prompt Injection Defense Layer",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }

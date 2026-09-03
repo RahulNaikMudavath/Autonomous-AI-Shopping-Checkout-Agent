@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -19,11 +19,12 @@ import SpecializedAgentsConsole from './components/SpecializedAgentsConsole';
 import MerchantSimulatorExplorer from './components/MerchantSimulatorExplorer';
 import CommerceGatewayExplorer from './components/CommerceGatewayExplorer';
 import DelegatedPaymentSandbox from './components/DelegatedPaymentSandbox';
+import AgentSecurityCenter from './components/AgentSecurityCenter';
 
 const API_BASE = 'http://localhost:8000';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'safety' | 'protocols' | 'orders'
+  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'security' | 'safety' | 'protocols' | 'orders'
   
   // Data State
   const [recommendation, setRecommendation] = useState(null);
@@ -274,7 +275,7 @@ export default function App() {
                 <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
                   AgentCart
                 </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.5</span>
+                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.6</span>
               </div>
               <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
                 Autonomous AI Shopping &amp; Checkout Agent
@@ -305,7 +306,7 @@ export default function App() {
               }`}
             >
               <Brain className="w-3.5 h-3.5 text-purple-400" />
-              <span>Agent Brain</span>
+              <span>Brain</span>
             </button>
 
             <button
@@ -317,7 +318,7 @@ export default function App() {
               }`}
             >
               <Puzzle className="w-3.5 h-3.5 text-pink-400" />
-              <span>Specialized</span>
+              <span>Agents</span>
             </button>
 
             <button
@@ -353,7 +354,19 @@ export default function App() {
               }`}
             >
               <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Payments &amp; Auth</span>
+              <span>Payments</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('security')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                activeTab === 'security' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+              <span>Security</span>
             </button>
 
             <button
@@ -365,7 +378,7 @@ export default function App() {
               }`}
             >
               <Shield className="w-3.5 h-3.5 text-amber-400" />
-              <span>Trust &amp; Safety</span>
+              <span>Policies</span>
             </button>
 
             <button
@@ -377,7 +390,7 @@ export default function App() {
               }`}
             >
               <Network className="w-3.5 h-3.5 text-cyan-400" />
-              <span>UCP &amp; MCP</span>
+              <span>UCP/MCP</span>
             </button>
 
             <button
@@ -527,7 +540,12 @@ export default function App() {
           <DelegatedPaymentSandbox />
         )}
 
-        {/* TAB 7: TRUST & SAFETY */}
+        {/* TAB 7: AGENT SECURITY & PROMPT INJECTION DEFENSE */}
+        {activeTab === 'security' && (
+          <AgentSecurityCenter />
+        )}
+
+        {/* TAB 8: TRUST & SAFETY */}
         {activeTab === 'safety' && (
           <SafetyDashboard 
             policy={policy}
@@ -538,12 +556,12 @@ export default function App() {
           />
         )}
 
-        {/* TAB 8: PROTOCOLS & MCP */}
+        {/* TAB 9: PROTOCOLS & MCP */}
         {activeTab === 'protocols' && (
           <ProtocolExplorer />
         )}
 
-        {/* TAB 9: ORDERS & RETURNS */}
+        {/* TAB 10: ORDERS & RETURNS */}
         {activeTab === 'orders' && (
           <OrdersTracker 
             orders={orders}
