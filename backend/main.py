@@ -418,6 +418,41 @@ async def simulate_failure_recovery(req: SimulateFailureRequest):
     """Simulates a distributed commerce failure and returns the autonomous recovery trace."""
     return FailureRecoveryEngine.simulate_recovery(req.scenario, req.session_id or "session_default")
 
+# -------------------------------------------------------------
+# 11. Multi-Tier Memory Subsystem Endpoints
+# -------------------------------------------------------------
+from backend.agent.memory_manager import (
+    MemoryManager, UserProfileMemory, SemanticMemoryItem, SemanticSearchResult
+)
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    top_k: Optional[int] = 3
+
+class AddSemanticMemoryRequest(BaseModel):
+    content: str
+    category: Optional[str] = "user_preference"
+
+@app.get("/api/memory/overview")
+async def get_memory_overview():
+    """Retrieve full state of all 4 memory tiers."""
+    return MemoryManager.get_all_memory()
+
+@app.post("/api/memory/semantic/search", response_model=List[SemanticSearchResult])
+async def search_semantic_memories(req: SemanticSearchRequest):
+    """Vector similarity search against natural language preference memory."""
+    return MemoryManager.search_semantic_memory(req.query, req.top_k or 3)
+
+@app.post("/api/memory/semantic/add", response_model=SemanticMemoryItem)
+async def add_semantic_memory(req: AddSemanticMemoryRequest):
+    """Ingest a new natural language rule or preference into the Vector DB."""
+    return MemoryManager.add_semantic_memory(req.content, req.category or "user_preference")
+
+@app.put("/api/memory/preferences", response_model=UserProfileMemory)
+async def update_profile_preferences(req: Dict[str, Any]):
+    """Update Tier 1 User Profile Memory preferences."""
+    return MemoryManager.update_profile(req)
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -430,6 +465,7 @@ async def health_check():
         "payment_architecture": "Tokenized Delegated Authorization Sandbox (Zero Raw Card Storage)",
         "security": "Untrusted Context Sanitizer & Agent Tool Permission Matrix (RBAC)",
         "resiliency": "Distributed Failure Recovery & Autonomous Replanning Engine (6 Scenarios)",
+        "memory": "4-Tier Architecture (Profile, Transactions, Working State, Vector DB)",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }

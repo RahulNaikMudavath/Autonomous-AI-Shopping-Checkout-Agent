@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -22,11 +22,12 @@ import DelegatedPaymentSandbox from './components/DelegatedPaymentSandbox';
 import AgentSecurityCenter from './components/AgentSecurityCenter';
 import ToolPermissionsMatrix from './components/ToolPermissionsMatrix';
 import FailureRecoveryCenter from './components/FailureRecoveryCenter';
+import MemoryConsole from './components/MemoryConsole';
 
 const API_BASE = 'http://localhost:8000';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'security' | 'permissions' | 'resiliency' | 'safety' | 'protocols' | 'orders'
+  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'security' | 'permissions' | 'resiliency' | 'memory' | 'safety' | 'protocols' | 'orders'
   
   // Data State
   const [recommendation, setRecommendation] = useState(null);
@@ -277,7 +278,7 @@ export default function App() {
                 <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
                   AgentCart
                 </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.8</span>
+                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.9</span>
               </div>
               <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
                 Autonomous AI Shopping &amp; Checkout Agent
@@ -393,6 +394,18 @@ export default function App() {
             >
               <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
               <span>Resiliency</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('memory')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                activeTab === 'memory' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5 text-pink-400" />
+              <span>Memory</span>
             </button>
 
             <button
@@ -581,7 +594,12 @@ export default function App() {
           <FailureRecoveryCenter />
         )}
 
-        {/* TAB 10: TRUST & SAFETY */}
+        {/* TAB 10: MULTI-TIER MEMORY SUBSYSTEM */}
+        {activeTab === 'memory' && (
+          <MemoryConsole />
+        )}
+
+        {/* TAB 11: TRUST & SAFETY */}
         {activeTab === 'safety' && (
           <SafetyDashboard 
             policy={policy}
@@ -592,12 +610,12 @@ export default function App() {
           />
         )}
 
-        {/* TAB 11: PROTOCOLS & MCP */}
+        {/* TAB 12: PROTOCOLS & MCP */}
         {activeTab === 'protocols' && (
           <ProtocolExplorer />
         )}
 
-        {/* TAB 12: ORDERS & RETURNS */}
+        {/* TAB 13: ORDERS & RETURNS */}
         {activeTab === 'orders' && (
           <OrdersTracker 
             orders={orders}
