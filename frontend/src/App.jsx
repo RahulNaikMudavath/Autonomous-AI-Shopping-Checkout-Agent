@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity, FlaskConical, Building2 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity, FlaskConical, Building2, Settings 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -26,6 +26,7 @@ import MemoryConsole from './components/MemoryConsole';
 import AgentObservabilityConsole from './components/AgentObservabilityConsole';
 import BenchmarkEvaluationConsole from './components/BenchmarkEvaluationConsole';
 import SystemArchitectureMap from './components/SystemArchitectureMap';
+import ApiSettingsModal from './components/ApiSettingsModal';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -43,6 +44,7 @@ export default function App() {
   // UI State
   const [isLoading, setIsLoading] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHitlModalOpen, setIsHitlModalOpen] = useState(false);
   const [selectedHitlProduct, setSelectedHitlProduct] = useState(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -484,8 +486,16 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Cart Trigger */}
-          <div className="flex items-center gap-3">
+          {/* Actions: Settings & Cart Trigger */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="btn-secondary p-2.5 rounded-xl flex items-center justify-center text-slate-300 hover:text-white"
+              title="Configure Real API Keys"
+            >
+              <Settings className="w-4 h-4 text-indigo-400" />
+            </button>
+
             <button
               onClick={() => setIsCartOpen(true)}
               className="relative btn-secondary p-2.5 rounded-xl flex items-center justify-center text-slate-200"
@@ -702,6 +712,13 @@ export default function App() {
           }
         }}
         isProcessing={isCheckingOut}
+      />
+
+      {/* Real API Keys & Integrations Modal */}
+      <ApiSettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSaveSuccess={(msg) => triggerToast(msg)}
       />
     </div>
   );

@@ -494,6 +494,35 @@ async def get_infrastructure_status():
     """Retrieve the real-time status of all 7 supporting infrastructure components."""
     return InfrastructureManager.get_infrastructure_status()
 
+# -------------------------------------------------------------
+# 15. Dynamic Settings & API Key Manager Endpoints
+# -------------------------------------------------------------
+from backend.config import get_settings, update_runtime_settings, AppSettings
+
+@app.get("/api/settings")
+async def get_current_settings():
+    """Retrieve current settings with masked API keys."""
+    s = get_settings()
+    return {
+        "openai_api_key_configured": bool(s.openai_api_key),
+        "gemini_api_key_configured": bool(s.gemini_api_key),
+        "anthropic_api_key_configured": bool(s.anthropic_api_key),
+        "default_llm_provider": s.default_llm_provider,
+        "serpapi_api_key_configured": bool(s.serpapi_api_key),
+        "tavily_api_key_configured": bool(s.tavily_api_key),
+        "brave_api_key_configured": bool(s.brave_api_key),
+        "live_discovery_mode": s.live_discovery_mode,
+        "stripe_secret_key_configured": bool(s.stripe_secret_key),
+        "razorpay_key_id_configured": bool(s.razorpay_key_id),
+        "langfuse_configured": bool(s.langfuse_public_key)
+    }
+
+@app.post("/api/settings")
+async def update_settings(req: Dict[str, Any]):
+    """Update runtime settings and API keys dynamically."""
+    updated = update_runtime_settings(req)
+    return {"status": "success", "message": "API keys and configuration updated successfully"}
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -510,6 +539,7 @@ async def health_check():
         "observability": "Operational Waterfall Execution Trace & Telemetry KPI Dashboard",
         "evaluation": "Automated Benchmark Suite (TC01-TC12 across 120+ Workflows)",
         "infrastructure": "PostgreSQL, Redis, pgvector, OpenTelemetry, Langfuse, Docker, GitHub Actions",
+        "live_commerce": "Universal Real-World Retail Discovery (Amazon, Flipkart, Croma, Apple, Nike)",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }

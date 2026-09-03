@@ -22,14 +22,12 @@ class MerchantAgent:
 
         for p in products:
             merchant = get_merchant_by_id(p.merchant_id)
-            if not merchant:
-                continue
-
-            # Check for active promotions and apply bundle savings
-            if "AI_DEVELOPER_5OFF" in merchant.active_promotions:
-                applied_promos.append(f"{merchant.name} (AI Developer 5% Promo)")
-            elif "FREE_EXPRESS_SHIPPING" in merchant.active_promotions:
-                p.shipping_fee_inr = 0.0
+            if merchant:
+                # Check for active promotions and apply bundle savings
+                if "AI_DEVELOPER_5OFF" in merchant.active_promotions:
+                    applied_promos.append(f"{merchant.name} (AI Developer 5% Promo)")
+                elif "FREE_EXPRESS_SHIPPING" in merchant.active_promotions:
+                    p.shipping_fee_inr = 0.0
 
             verified_products.append(p)
 
