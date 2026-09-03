@@ -271,37 +271,70 @@ export default function App() {
       )}
 
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 glass-panel border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Brand Logo */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('shopping')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]">
-              <Bot className="w-6 h-6" />
+      <header className="sticky top-0 z-40 glass-panel border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Row 1: Brand Logo & Actions */}
+          <div className="h-16 flex items-center justify-between border-b border-white/5">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('shopping')}>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]">
+                <Bot className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
+                    AgentCart
+                  </span>
+                  <span className="badge badge-indigo text-[10px] py-0 px-2">v2.2-Production</span>
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
+                  Autonomous AI Shopping &amp; Checkout Agent
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
-                  AgentCart
-                </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">v2.2-Production</span>
+
+            {/* Top Right Actions */}
+            <div className="flex items-center gap-2.5">
+              <div className="hidden md:flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/30 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Live Commerce Active</span>
               </div>
-              <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
-                Autonomous AI Shopping &amp; Checkout Agent
-              </div>
+
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200 hover:text-white"
+                title="Configure Real API Keys"
+              >
+                <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">API Keys</span>
+              </button>
+
+              <button
+                onClick={() => setIsCartOpen(true)}
+                className="relative btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200"
+                title="View Cart"
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Cart</span>
+                {cart?.items?.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">
+                    {cart.items.length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 text-xs font-medium overflow-x-auto max-w-full">
+          {/* Row 2: 16 Navigation Tabs */}
+          <div className="py-2 overflow-x-auto no-scrollbar flex items-center gap-1.5 text-xs font-medium">
             <button
               onClick={() => setActiveTab('shopping')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'shopping' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
               <span>Copilot</span>
             </button>
 
@@ -309,7 +342,7 @@ export default function App() {
               onClick={() => setActiveTab('brain')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'brain' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -321,7 +354,7 @@ export default function App() {
               onClick={() => setActiveTab('specialized')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'specialized' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -333,7 +366,7 @@ export default function App() {
               onClick={() => setActiveTab('merchants')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'merchants' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -345,7 +378,7 @@ export default function App() {
               onClick={() => setActiveTab('gateway')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'gateway' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -357,7 +390,7 @@ export default function App() {
               onClick={() => setActiveTab('payments')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'payments' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -369,7 +402,7 @@ export default function App() {
               onClick={() => setActiveTab('security')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'security' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -381,7 +414,7 @@ export default function App() {
               onClick={() => setActiveTab('permissions')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'permissions' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -393,7 +426,7 @@ export default function App() {
               onClick={() => setActiveTab('resiliency')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'resiliency' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -405,7 +438,7 @@ export default function App() {
               onClick={() => setActiveTab('memory')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'memory' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -417,7 +450,7 @@ export default function App() {
               onClick={() => setActiveTab('observability')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'observability' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -429,7 +462,7 @@ export default function App() {
               onClick={() => setActiveTab('benchmark')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'benchmark' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -441,7 +474,7 @@ export default function App() {
               onClick={() => setActiveTab('architecture')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'architecture' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -453,7 +486,7 @@ export default function App() {
               onClick={() => setActiveTab('safety')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'safety' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -465,7 +498,7 @@ export default function App() {
               onClick={() => setActiveTab('protocols')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'protocols' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -477,36 +510,12 @@ export default function App() {
               onClick={() => setActiveTab('orders')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'orders' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
               <Package className="w-3.5 h-3.5 text-emerald-400" />
               <span>Orders ({orders.length})</span>
-            </button>
-          </nav>
-
-          {/* Actions: Settings & Cart Trigger */}
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="btn-secondary p-2.5 rounded-xl flex items-center justify-center text-slate-300 hover:text-white"
-              title="Configure Real API Keys"
-            >
-              <Settings className="w-4 h-4 text-indigo-400" />
-            </button>
-
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="relative btn-secondary p-2.5 rounded-xl flex items-center justify-center text-slate-200"
-              title="View Cart"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              {cart?.items?.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-indigo-500 text-white font-bold text-[10px] flex items-center justify-center shadow-lg">
-                  {cart.items.length}
-                </span>
-              )}
             </button>
           </div>
         </div>
