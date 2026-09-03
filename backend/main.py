@@ -373,6 +373,30 @@ async def sanitize_untrusted_content(req: SanitizeContentRequest):
         source_field=req.source_field or "product_description"
     )
 
+# -------------------------------------------------------------
+# 9. Tool Permissions & Agent RBAC Matrix Endpoints
+# -------------------------------------------------------------
+from backend.trust_safety.agent_permissions import (
+    AgentPermissionGuard, AgentRole, ToolCategory, ToolInvocationCheckResult, REGISTERED_TOOLS
+)
+
+class CheckToolPermissionRequest(BaseModel):
+    agent_role: AgentRole
+    tool_name: str
+
+@app.get("/api/security/permissions/matrix")
+async def get_tool_permission_matrix():
+    """Retrieve the full Tool Permission Matrix across all agent roles."""
+    return {
+        "matrix": AgentPermissionGuard.get_permission_matrix(),
+        "tools": {name: t.model_dump() for name, t in REGISTERED_TOOLS.items()}
+    }
+
+@app.post("/api/security/permissions/check", response_model=ToolInvocationCheckResult)
+async def check_agent_tool_permission(req: CheckToolPermissionRequest):
+    """Checks if an agent role has permission to execute a specific tool."""
+    return AgentPermissionGuard.check_permission(req.agent_role, req.tool_name)
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -383,7 +407,7 @@ async def health_check():
         "specialized_agents": ["Agent 1: Intent Agent", "Agent 2: Planning Agent", "Agent 3: Discovery Agent"],
         "merchant_apis": ["Merchant A (TechHub)", "Merchant B (ElectroBazaar)", "Merchant C (OmniStore)", "Merchant D (ProHardware)"],
         "payment_architecture": "Tokenized Delegated Authorization Sandbox (Zero Raw Card Storage)",
-        "security": "Untrusted Context Sanitizer & Prompt Injection Defense Layer",
+        "security": "Untrusted Context Sanitizer & Agent Tool Permission Matrix (RBAC)",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }
