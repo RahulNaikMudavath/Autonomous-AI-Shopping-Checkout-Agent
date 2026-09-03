@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -18,11 +18,12 @@ import AgentBrainMap from './components/AgentBrainMap';
 import SpecializedAgentsConsole from './components/SpecializedAgentsConsole';
 import MerchantSimulatorExplorer from './components/MerchantSimulatorExplorer';
 import CommerceGatewayExplorer from './components/CommerceGatewayExplorer';
+import DelegatedPaymentSandbox from './components/DelegatedPaymentSandbox';
 
 const API_BASE = 'http://localhost:8000';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'safety' | 'protocols' | 'orders'
+  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'safety' | 'protocols' | 'orders'
   
   // Data State
   const [recommendation, setRecommendation] = useState(null);
@@ -273,7 +274,7 @@ export default function App() {
                 <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
                   AgentCart
                 </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.4</span>
+                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.5</span>
               </div>
               <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
                 Autonomous AI Shopping &amp; Checkout Agent
@@ -340,7 +341,19 @@ export default function App() {
               }`}
             >
               <Cable className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Commerce Gateway</span>
+              <span>Gateway</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('payments')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                activeTab === 'payments' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Payments &amp; Auth</span>
             </button>
 
             <button
@@ -509,7 +522,12 @@ export default function App() {
           <CommerceGatewayExplorer />
         )}
 
-        {/* TAB 6: TRUST & SAFETY */}
+        {/* TAB 6: PAYMENTS & DELEGATED AUTHORIZATION */}
+        {activeTab === 'payments' && (
+          <DelegatedPaymentSandbox />
+        )}
+
+        {/* TAB 7: TRUST & SAFETY */}
         {activeTab === 'safety' && (
           <SafetyDashboard 
             policy={policy}
@@ -520,12 +538,12 @@ export default function App() {
           />
         )}
 
-        {/* TAB 7: PROTOCOLS & MCP */}
+        {/* TAB 8: PROTOCOLS & MCP */}
         {activeTab === 'protocols' && (
           <ProtocolExplorer />
         )}
 
-        {/* TAB 8: ORDERS & RETURNS */}
+        {/* TAB 9: ORDERS & RETURNS */}
         {activeTab === 'orders' && (
           <OrdersTracker 
             orders={orders}

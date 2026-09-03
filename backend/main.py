@@ -299,6 +299,56 @@ async def execute_mcp_tool(req: MCPToolCallRequest):
     """Directly execute an MCP tool."""
     return handle_mcp_tool_call(req)
 
+# -------------------------------------------------------------
+# 7. Payment Architecture & Delegated Authorization Endpoints
+# -------------------------------------------------------------
+from backend.infrastructure.payment_wallet_sandbox import (
+    PaymentWalletSandbox, TokenizedPaymentMethod, SandboxChargeRequest, SandboxChargeResponse
+)
+from backend.trust_safety.delegated_auth_policy import (
+    DelegatedAuthPolicyEngine, DelegatedAuthEvaluationRequest, DelegatedAuthDecision, DelegatedPolicySettings
+)
+
+@app.get("/api/payment/wallet", response_model=List[TokenizedPaymentMethod])
+async def get_user_payment_wallet():
+    """Retrieve tokenized payment wallet instruments (Zero raw card numbers stored)."""
+    return PaymentWalletSandbox.get_wallet_instruments()
+
+@app.get("/api/payment/policy", response_model=DelegatedPolicySettings)
+async def get_delegated_policy():
+    """Retrieve category bounded autonomy rules and hard transaction ceilings."""
+    return DelegatedAuthPolicyEngine.get_policy()
+
+@app.post("/api/payment/evaluate-delegated-auth", response_model=DelegatedAuthDecision)
+async def evaluate_delegated_authorization(req: DelegatedAuthEvaluationRequest):
+    """
+    Evaluates purchase against category bounded autonomy rules:
+    - Groceries: <= 3k -> AUTO APPROVE
+    - Electronics: <= 10k -> AUTO APPROVE
+    - Electronics: > 10k -> ASK USER
+    - Hard Ceiling: > 150k -> BLOCK
+    """
+    decision = DelegatedAuthPolicyEngine.evaluate_transaction(req)
+    add_audit_log(
+        action_type="DELEGATED_AUTH_EVAL",
+        actor="AGENT",
+        payload_summary=f"Evaluated '{req.item_title}' (₹{req.price_inr:,.2f}) -> {decision.action.value}",
+        policy_verified=decision.is_within_policy
+    )
+    return decision
+
+@app.post("/api/payment/sandbox/execute-charge", response_model=SandboxChargeResponse)
+async def execute_sandbox_charge(req: SandboxChargeRequest):
+    """Executes settled payment through simulated payment sandbox using delegated token."""
+    res = PaymentWalletSandbox.execute_sandbox_charge(req)
+    add_audit_log(
+        action_type="SANDBOX_PAYMENT_SETTLED",
+        actor="PAYMENT_AGENT",
+        payload_summary=f"Settled payment for {req.item_title} (₹{req.amount:,.2f}) via {res.payment_method_used}",
+        policy_verified=True
+    )
+    return res
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -308,6 +358,7 @@ async def health_check():
         "brain": "Hierarchical Multi-Agent Architecture",
         "specialized_agents": ["Agent 1: Intent Agent", "Agent 2: Planning Agent", "Agent 3: Discovery Agent"],
         "merchant_apis": ["Merchant A (TechHub)", "Merchant B (ElectroBazaar)", "Merchant C (OmniStore)", "Merchant D (ProHardware)"],
+        "payment_architecture": "Tokenized Delegated Authorization Sandbox (Zero Raw Card Storage)",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }
