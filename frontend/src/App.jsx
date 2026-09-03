@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -16,11 +16,12 @@ import OrdersTracker from './components/OrdersTracker';
 import CartDrawer from './components/CartDrawer';
 import AgentBrainMap from './components/AgentBrainMap';
 import SpecializedAgentsConsole from './components/SpecializedAgentsConsole';
+import MerchantSimulatorExplorer from './components/MerchantSimulatorExplorer';
 
 const API_BASE = 'http://localhost:8000';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'safety' | 'protocols' | 'orders'
+  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'safety' | 'protocols' | 'orders'
   
   // Data State
   const [recommendation, setRecommendation] = useState(null);
@@ -271,7 +272,7 @@ export default function App() {
                 <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
                   AgentCart
                 </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.2</span>
+                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.3</span>
               </div>
               <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
                 Autonomous AI Shopping &amp; Checkout Agent
@@ -280,10 +281,10 @@ export default function App() {
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 text-xs font-medium">
+          <nav className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 text-xs font-medium overflow-x-auto max-w-full">
             <button
               onClick={() => setActiveTab('shopping')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'shopping' 
                   ? 'bg-indigo-600 text-white shadow-md' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -295,7 +296,7 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab('brain')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'brain' 
                   ? 'bg-indigo-600 text-white shadow-md' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -307,19 +308,31 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab('specialized')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'specialized' 
                   ? 'bg-indigo-600 text-white shadow-md' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
               <Puzzle className="w-3.5 h-3.5 text-pink-400" />
-              <span>Specialized Agents</span>
+              <span>Specialized</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('merchants')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                activeTab === 'merchants' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Store className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Merchant Simulator</span>
             </button>
 
             <button
               onClick={() => setActiveTab('safety')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'safety' 
                   ? 'bg-indigo-600 text-white shadow-md' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -331,7 +344,7 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab('protocols')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'protocols' 
                   ? 'bg-indigo-600 text-white shadow-md' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -343,7 +356,7 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab('orders')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
                 activeTab === 'orders' 
                   ? 'bg-indigo-600 text-white shadow-md' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -473,7 +486,12 @@ export default function App() {
           <SpecializedAgentsConsole />
         )}
 
-        {/* TAB 4: TRUST & SAFETY */}
+        {/* TAB 4: MERCHANT SIMULATOR */}
+        {activeTab === 'merchants' && (
+          <MerchantSimulatorExplorer />
+        )}
+
+        {/* TAB 5: TRUST & SAFETY */}
         {activeTab === 'safety' && (
           <SafetyDashboard 
             policy={policy}
@@ -484,12 +502,12 @@ export default function App() {
           />
         )}
 
-        {/* TAB 5: PROTOCOLS & MCP */}
+        {/* TAB 6: PROTOCOLS & MCP */}
         {activeTab === 'protocols' && (
           <ProtocolExplorer />
         )}
 
-        {/* TAB 6: ORDERS & RETURNS */}
+        {/* TAB 7: ORDERS & RETURNS */}
         {activeTab === 'orders' && (
           <OrdersTracker 
             orders={orders}
