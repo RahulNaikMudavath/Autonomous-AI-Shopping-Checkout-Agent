@@ -397,6 +397,27 @@ async def check_agent_tool_permission(req: CheckToolPermissionRequest):
     """Checks if an agent role has permission to execute a specific tool."""
     return AgentPermissionGuard.check_permission(req.agent_role, req.tool_name)
 
+# -------------------------------------------------------------
+# 10. Failure Recovery & Resiliency Endpoints
+# -------------------------------------------------------------
+from backend.infrastructure.failure_recovery_engine import (
+    FailureRecoveryEngine, FailureScenarioType, FailureRecoveryTrace
+)
+
+class SimulateFailureRequest(BaseModel):
+    scenario: FailureScenarioType
+    session_id: Optional[str] = "session_default"
+
+@app.get("/api/resilience/scenarios")
+async def get_resilience_scenarios():
+    """Retrieve supported failure scenarios and recovery strategies."""
+    return FailureRecoveryEngine.get_supported_scenarios()
+
+@app.post("/api/resilience/simulate", response_model=FailureRecoveryTrace)
+async def simulate_failure_recovery(req: SimulateFailureRequest):
+    """Simulates a distributed commerce failure and returns the autonomous recovery trace."""
+    return FailureRecoveryEngine.simulate_recovery(req.scenario, req.session_id or "session_default")
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -408,6 +429,7 @@ async def health_check():
         "merchant_apis": ["Merchant A (TechHub)", "Merchant B (ElectroBazaar)", "Merchant C (OmniStore)", "Merchant D (ProHardware)"],
         "payment_architecture": "Tokenized Delegated Authorization Sandbox (Zero Raw Card Storage)",
         "security": "Untrusted Context Sanitizer & Agent Tool Permission Matrix (RBAC)",
+        "resiliency": "Distributed Failure Recovery & Autonomous Replanning Engine (6 Scenarios)",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }
