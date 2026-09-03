@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity, FlaskConical 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -24,11 +24,12 @@ import ToolPermissionsMatrix from './components/ToolPermissionsMatrix';
 import FailureRecoveryCenter from './components/FailureRecoveryCenter';
 import MemoryConsole from './components/MemoryConsole';
 import AgentObservabilityConsole from './components/AgentObservabilityConsole';
+import BenchmarkEvaluationConsole from './components/BenchmarkEvaluationConsole';
 
 const API_BASE = 'http://localhost:8000';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'security' | 'permissions' | 'resiliency' | 'memory' | 'observability' | 'safety' | 'protocols' | 'orders'
+  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'security' | 'permissions' | 'resiliency' | 'memory' | 'observability' | 'benchmark' | 'safety' | 'protocols' | 'orders'
   
   // Data State
   const [recommendation, setRecommendation] = useState(null);
@@ -279,7 +280,7 @@ export default function App() {
                 <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
                   AgentCart
                 </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">v2.0</span>
+                <span className="badge badge-indigo text-[10px] py-0 px-2">v2.1</span>
               </div>
               <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
                 Autonomous AI Shopping &amp; Checkout Agent
@@ -419,6 +420,18 @@ export default function App() {
             >
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
               <span>Observability</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('benchmark')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                activeTab === 'benchmark' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <FlaskConical className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Benchmark</span>
             </button>
 
             <button
@@ -617,7 +630,12 @@ export default function App() {
           <AgentObservabilityConsole />
         )}
 
-        {/* TAB 12: TRUST & SAFETY */}
+        {/* TAB 12: EVALUATION & BENCHMARK HARNESS */}
+        {activeTab === 'benchmark' && (
+          <BenchmarkEvaluationConsole />
+        )}
+
+        {/* TAB 13: TRUST & SAFETY */}
         {activeTab === 'safety' && (
           <SafetyDashboard 
             policy={policy}
@@ -628,12 +646,12 @@ export default function App() {
           />
         )}
 
-        {/* TAB 13: PROTOCOLS & MCP */}
+        {/* TAB 14: PROTOCOLS & MCP */}
         {activeTab === 'protocols' && (
           <ProtocolExplorer />
         )}
 
-        {/* TAB 14: ORDERS & RETURNS */}
+        {/* TAB 15: ORDERS & RETURNS */}
         {activeTab === 'orders' && (
           <OrdersTracker 
             orders={orders}

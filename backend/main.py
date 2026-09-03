@@ -465,6 +465,23 @@ async def get_latest_observability_trace():
     """Retrieve operational execution trace and metrics KPI summary."""
     return AgentObservabilityEngine.get_latest_session_trace()
 
+# -------------------------------------------------------------
+# 13. Evaluation Framework & Benchmark Endpoints
+# -------------------------------------------------------------
+from backend.agent.evaluation_framework import (
+    AgentBenchmarkHarness, BenchmarkSummaryReport
+)
+
+@app.get("/api/evaluation/benchmark-report", response_model=BenchmarkSummaryReport)
+async def get_benchmark_report():
+    """Retrieve the latest quantitative benchmark evaluation across 12 test suites."""
+    return AgentBenchmarkHarness.execute_all_12_test_cases()
+
+@app.post("/api/evaluation/run-benchmark", response_model=BenchmarkSummaryReport)
+async def run_automated_benchmark():
+    """Executes all 12 test cases against 120 simulated commerce workflows."""
+    return AgentBenchmarkHarness.execute_all_12_test_cases()
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -479,6 +496,7 @@ async def health_check():
         "resiliency": "Distributed Failure Recovery & Autonomous Replanning Engine (6 Scenarios)",
         "memory": "4-Tier Architecture (Profile, Transactions, Working State, Vector DB)",
         "observability": "Operational Waterfall Execution Trace & Telemetry KPI Dashboard",
+        "evaluation": "Automated Benchmark Suite (TC01-TC12 across 120+ Workflows)",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }
