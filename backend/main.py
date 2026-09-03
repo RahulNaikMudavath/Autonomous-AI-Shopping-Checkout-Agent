@@ -2,7 +2,7 @@
 AgentCart Main Application
 FastAPI Server connecting all 5 layers:
 - User Experience APIs
-- Agent Intelligence Planner
+- Agent Intelligence: Hierarchical Multi-Agent Supervisor & Context Store
 - Universal Commerce Protocol (UCP v1.0) & MCP Tools
 - Commerce Infrastructure (Merchants, Cart, Order Engine)
 - Trust & Safety Guardrails & Cryptographic Audit Ledger
@@ -17,11 +17,13 @@ from backend.schemas import (
     UserRequirements, RecommendationResult, Product, Cart, Order, SpendingPolicy,
     PolicyCheckResult, PromptInjectionScanResult, AuditBlock, MCPToolCallRequest, MCPToolCallResponse
 )
-from backend.agent.planner import plan_and_execute_shopping, extract_requirements
+from backend.agent.supervisor import AgentSupervisor
+from backend.agent.context_store import ContextStore
+from backend.agent.checkout_pipeline import CheckoutPipeline
 from backend.infrastructure.merchants import get_all_merchants, search_merchant_catalog
 from backend.infrastructure.cart_order_engine import (
     get_or_create_cart, add_to_cart, remove_from_cart, clear_cart,
-    execute_order_checkout, get_all_orders, get_order_by_id, process_return_request
+    get_all_orders, get_order_by_id, process_return_request
 )
 from backend.trust_safety.policy_engine import (
     get_current_policy, update_policy, evaluate_spending_policy,
@@ -32,8 +34,8 @@ from backend.protocol.mcp_server import MCP_TOOLS_SPEC, handle_mcp_tool_call
 
 app = FastAPI(
     title="AgentCart - Autonomous AI Shopping & Checkout Agent",
-    description="5-Layer Autonomous Commerce Intelligence System",
-    version="1.0.0"
+    description="5-Layer Autonomous Commerce Intelligence System with Hierarchical Agent Brain",
+    version="1.1.0"
 )
 
 # CORS Middleware
@@ -63,24 +65,37 @@ class CheckoutDirectRequest(BaseModel):
     shipping_address: Optional[str] = "Rahul N., Flat 402, HighTech Tech Park, Bangalore 560100"
     payment_method: Optional[str] = "UPI (Tokenized 1-Click)"
     user_confirmed: bool = True
+    session_id: Optional[str] = "session_default"
 
 class TestInjectionRequest(BaseModel):
     prompt_text: str
 
 # -------------------------------------------------------------
-# 1. Shopping Assistant & Agent Intelligence Endpoints
+# 1. Shopping Assistant & Agent Brain Endpoints
 # -------------------------------------------------------------
 
 @app.post("/api/chat", response_model=RecommendationResult)
 async def process_shopping_query(req: ChatQueryRequest):
     """
-    Main shopping assistant endpoint. Runs autonomous 5-layer reasoning pipeline:
-    requirement parsing -> multi-merchant discovery -> MCDA scoring -> policy verification -> trace generation.
+    Main shopping assistant endpoint. Runs hierarchical multi-agent reasoning:
+    User -> Intent Extractor -> Task Planner -> Context Store & Policy Engine -> Agent Supervisor -> [Discovery, Ranking, Merchant Agents] -> Recommendation.
     """
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
         
-    return plan_and_execute_shopping(req.query)
+    return AgentSupervisor.process_request(query=req.query, session_id=req.session_id or "session_default")
+
+@app.get("/api/agent-brain/state")
+async def get_agent_brain_state(session_id: str = "session_default"):
+    """Returns active session context, working memory, and current execution stage."""
+    session = ContextStore.get_or_create_session(session_id)
+    profile = ContextStore.get_user_profile()
+    return {
+        "session": session.model_dump(),
+        "user_profile": profile.model_dump(),
+        "active_subagents": ["DiscoveryAgent", "RankingAgent", "MerchantAgent"],
+        "supervisor_status": "ONLINE"
+    }
 
 @app.get("/api/products", response_model=List[Product])
 async def get_catalog(category: Optional[str] = None, max_price: Optional[float] = None):
@@ -126,34 +141,24 @@ async def empty_cart(cart_id: str = "default_user_cart"):
 @app.post("/api/checkout/authorize-and-pay", response_model=Order)
 async def direct_checkout(req: CheckoutDirectRequest):
     """
-    Executes 1-click tokenized checkout after validating spending policies & authorization.
+    Executes stage-gated checkout: Cart -> Checkout -> Authorization -> Payment -> Order.
     """
     products = search_merchant_catalog()
     product = next((p for p in products if p.id == req.product_id), None)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
         
-    policy_check = evaluate_spending_policy(product)
-    
-    # If policy fails outright
-    if not policy_check.passed:
-        raise HTTPException(status_code=400, detail=f"Policy Block: {'; '.join(policy_check.policy_violations)}")
-        
-    # Append to cryptographic audit ledger
-    audit_block = add_audit_log(
-        action_type="ORDER_CHECKOUT_AUTHORIZED",
-        actor="USER" if req.user_confirmed else "AGENT_AUTONOMOUS",
-        payload_summary=f"Authorized purchase of {product.title} for ₹{product.price_inr:,.2f} from {product.merchant_name}",
-        policy_verified=True
-    )
-    
-    order = execute_order_checkout(
-        product=product,
-        payment_method=req.payment_method or "UPI (Tokenized 1-Click)",
-        shipping_address=req.shipping_address or "Rahul N., Flat 402, HighTech Tech Park, Bangalore 560100",
-        audit_hash=audit_block.current_hash
-    )
-    return order
+    try:
+        order, traces = CheckoutPipeline.execute_stage_gated_checkout(
+            product=product,
+            session_id=req.session_id or "session_default",
+            user_confirmed=req.user_confirmed,
+            shipping_address=req.shipping_address,
+            payment_method=req.payment_method or "UPI (Tokenized 1-Click)"
+        )
+        return order
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # -------------------------------------------------------------
 # 3. Order Lifecycle & Return Management Endpoints
@@ -237,6 +242,8 @@ async def health_check():
     return {
         "status": "healthy",
         "system": "AgentCart Autonomous AI Shopping & Checkout",
+        "brain": "Hierarchical Multi-Agent Architecture",
+        "subagents": ["DiscoveryAgent", "RankingAgent", "MerchantAgent", "Supervisor"],
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }

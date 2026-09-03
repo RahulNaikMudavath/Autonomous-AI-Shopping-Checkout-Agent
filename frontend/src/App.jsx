@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -14,11 +14,12 @@ import SafetyDashboard from './components/SafetyDashboard';
 import ProtocolExplorer from './components/ProtocolExplorer';
 import OrdersTracker from './components/OrdersTracker';
 import CartDrawer from './components/CartDrawer';
+import AgentBrainMap from './components/AgentBrainMap';
 
 const API_BASE = 'http://localhost:8000';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'safety' | 'protocols' | 'orders'
+  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'safety' | 'protocols' | 'orders'
   
   // Data State
   const [recommendation, setRecommendation] = useState(null);
@@ -26,6 +27,7 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [policy, setPolicy] = useState(null);
   const [auditLedger, setAuditLedger] = useState([]);
+  const [brainState, setBrainState] = useState(null);
   
   // UI State
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +60,10 @@ export default function App() {
       const auditRes = await fetch(`${API_BASE}/api/audit-ledger`);
       if (auditRes.ok) setAuditLedger(await auditRes.json());
 
+      // 5. Fetch Brain State
+      const brainRes = await fetch(`${API_BASE}/api/agent-brain/state`);
+      if (brainRes.ok) setBrainState(await brainRes.json());
+
       // Run default query if no recommendation yet
       if (!recommendation) {
         handleSearchQuery("I need a laptop for AI/ML development under ₹1.2 lakh. 32GB RAM minimum. NVIDIA GPU. 1TB SSD. Prefer good battery life. Find the best value.");
@@ -73,11 +79,15 @@ export default function App() {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: queryText })
+        body: JSON.stringify({ query: queryText, session_id: "session_default" })
       });
       if (res.ok) {
         const data = await res.json();
         setRecommendation(data);
+        
+        // Refresh brain state
+        const brainRes = await fetch(`${API_BASE}/api/agent-brain/state`);
+        if (brainRes.ok) setBrainState(await brainRes.json());
       }
     } catch (err) {
       console.error("Search query error:", err);
@@ -150,7 +160,8 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_id: product.id,
-          user_confirmed: userConfirmed
+          user_confirmed: userConfirmed,
+          session_id: "session_default"
         })
       });
 
@@ -259,7 +270,7 @@ export default function App() {
                 <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
                   AgentCart
                 </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.0</span>
+                <span className="badge badge-indigo text-[10px] py-0 px-2">v1.1</span>
               </div>
               <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
                 Autonomous AI Shopping &amp; Checkout Agent
@@ -279,6 +290,18 @@ export default function App() {
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Shopping Copilot</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('brain')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'brain' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Brain className="w-3.5 h-3.5 text-purple-400" />
+              <span>Agent Brain</span>
             </button>
 
             <button
@@ -394,7 +417,45 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: TRUST & SAFETY */}
+        {/* TAB 2: THE AGENT BRAIN */}
+        {activeTab === 'brain' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <AgentBrainMap activeStage={brainState?.session?.active_stage || "IDLE"} />
+
+            {/* Session Context State Inspector */}
+            {brainState && (
+              <div className="glass-panel p-6 border-white/10 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-cyan-400" />
+                    ContextStore: Active Session State &amp; Working Memory
+                  </h3>
+                  <span className="badge badge-cyan text-xs font-mono">
+                    Session: {brainState.session.session_id}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                  <div className="p-3.5 rounded-lg bg-black/40 border border-white/5 space-y-2">
+                    <div className="text-slate-400 font-bold">User Profile &amp; Preferences:</div>
+                    <div className="text-slate-200">Name: {brainState.user_profile.name}</div>
+                    <div className="text-slate-200">Brand Affinity: {brainState.user_profile.brand_affinity.join(', ')}</div>
+                    <div className="text-slate-200">Default Shipping: {brainState.user_profile.default_shipping_address}</div>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-black/40 border border-white/5 space-y-2">
+                    <div className="text-slate-400 font-bold">Supervisor Working Scratchpad:</div>
+                    <pre className="text-cyan-300 text-[11px] overflow-x-auto">
+                      {JSON.stringify(brainState.session.agent_scratchpad, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: TRUST & SAFETY */}
         {activeTab === 'safety' && (
           <SafetyDashboard 
             policy={policy}
@@ -405,12 +466,12 @@ export default function App() {
           />
         )}
 
-        {/* TAB 3: PROTOCOLS & MCP */}
+        {/* TAB 4: PROTOCOLS & MCP */}
         {activeTab === 'protocols' && (
           <ProtocolExplorer />
         )}
 
-        {/* TAB 4: ORDERS & RETURNS */}
+        {/* TAB 5: ORDERS & RETURNS */}
         {activeTab === 'orders' && (
           <OrdersTracker 
             orders={orders}
