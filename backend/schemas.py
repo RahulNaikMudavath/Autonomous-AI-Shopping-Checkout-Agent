@@ -177,7 +177,22 @@ class UCPCatalogResponse(BaseModel):
     protocol_version: str = "UCP/1.0"
     total_count: int
     merchants_polled: List[str]
-    products: List[Product]
+    products: List[Product] = []
+
+class UCPHeader(BaseModel):
+    version: str = "1.0"
+    sender: str = "AgentCart-Core"
+    recipient: str = "MerchantGateway"
+    action: str
+    message_id: str
+    timestamp: str
+
+class UCPPayload(BaseModel):
+    data: Dict[str, Any]
+
+class UCPEnvelope(BaseModel):
+    header: UCPHeader
+    payload: UCPPayload
 
 class MCPToolCallRequest(BaseModel):
     tool_name: str

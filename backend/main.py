@@ -39,12 +39,13 @@ from backend.trust_safety.policy_engine import (
 from backend.protocol.ucp import ucp_router
 from backend.protocol.mcp_server import MCP_TOOLS_SPEC, handle_mcp_tool_call
 
+from backend.protocol.gateway_router import gateway_router
 from backend.infrastructure.merchant_simulator import merchant_sim_router
 
 app = FastAPI(
     title="AgentCart - Autonomous AI Shopping & Checkout Agent",
     description="5-Layer Autonomous Commerce Intelligence System with Specialized Agents & Dedicated Merchant APIs",
-    version="1.3.0"
+    version="1.4.0"
 )
 
 # CORS Middleware
@@ -58,6 +59,7 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(ucp_router)
+app.include_router(gateway_router)
 app.include_router(merchant_apis_router)
 app.include_router(merchant_sim_router)
 
