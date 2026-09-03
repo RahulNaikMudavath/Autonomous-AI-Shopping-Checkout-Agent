@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity, FlaskConical, Building2, Settings 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity, FlaskConical, Building2, Settings, ChevronDown, Layers 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -45,6 +45,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDevMenuOpen, setIsDevMenuOpen] = useState(false);
   const [isHitlModalOpen, setIsHitlModalOpen] = useState(false);
   const [selectedHitlProduct, setSelectedHitlProduct] = useState(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -272,243 +273,42 @@ export default function App() {
 
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-40 glass-panel border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Row 1: Brand Logo & Actions */}
-          <div className="h-16 flex items-center justify-between border-b border-white/5">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('shopping')}>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]">
-                <Bot className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
-                    AgentCart
-                  </span>
-                  <span className="badge badge-indigo text-[10px] py-0 px-2">v2.2-Production</span>
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
-                  Autonomous AI Shopping &amp; Checkout Agent
-                </div>
-              </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          {/* Brand Logo */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('shopping')}>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]">
+              <Bot className="w-6 h-6" />
             </div>
-
-            {/* Top Right Actions */}
-            <div className="flex items-center gap-2.5">
-              <div className="hidden md:flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/30 px-3 py-1.5 rounded-lg border border-emerald-500/20">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Live Commerce Active</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
+                  AgentCart
+                </span>
+                <span className="badge badge-indigo text-[10px] py-0 px-2">AI Commerce</span>
               </div>
-
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200 hover:text-white"
-                title="Configure Real API Keys"
-              >
-                <Settings className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">API Keys</span>
-              </button>
-
-              <button
-                onClick={() => setIsCartOpen(true)}
-                className="relative btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200"
-                title="View Cart"
-              >
-                <ShoppingBag className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="hidden sm:inline">Cart</span>
-                {cart?.items?.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">
-                    {cart.items.length}
-                  </span>
-                )}
-              </button>
+              <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
+                Autonomous Shopping &amp; Checkout
+              </div>
             </div>
           </div>
 
-          {/* Row 2: 16 Navigation Tabs */}
-          <div className="py-2 overflow-x-auto no-scrollbar flex items-center gap-1.5 text-xs font-medium">
+          {/* Center Navigation: Clean & Essential */}
+          <nav className="flex items-center gap-1.5 bg-white/[0.03] p-1 rounded-xl border border-white/10 text-xs font-medium">
             <button
               onClick={() => setActiveTab('shopping')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
                 activeTab === 'shopping' 
                   ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Copilot</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('brain')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'brain' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Brain className="w-3.5 h-3.5 text-purple-400" />
-              <span>Brain</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('specialized')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'specialized' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Puzzle className="w-3.5 h-3.5 text-pink-400" />
-              <span>Agents</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('merchants')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'merchants' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Store className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Simulator</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('gateway')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'gateway' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Cable className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Gateway</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('payments')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'payments' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Payments</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('security')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'security' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
-              <span>Security</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('permissions')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'permissions' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <KeyRound className="w-3.5 h-3.5 text-purple-400" />
-              <span>Permissions</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('resiliency')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'resiliency' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Resiliency</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('memory')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'memory' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Database className="w-3.5 h-3.5 text-pink-400" />
-              <span>Memory</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('observability')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'observability' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Observability</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('benchmark')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'benchmark' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <FlaskConical className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Benchmark</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('architecture')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'architecture' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Architecture</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('safety')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'safety' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5 text-amber-400" />
-              <span>Policies</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('protocols')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
-                activeTab === 'protocols' 
-                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Network className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Protocols</span>
+              <span>Shop &amp; Copilot</span>
             </button>
 
             <button
               onClick={() => setActiveTab('orders')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
                 activeTab === 'orders' 
                   ? 'bg-indigo-600 text-white shadow-md font-bold' 
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -516,6 +316,70 @@ export default function App() {
             >
               <Package className="w-3.5 h-3.5 text-emerald-400" />
               <span>Orders ({orders.length})</span>
+            </button>
+
+            {/* Developer Architecture Lab Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setIsDevMenuOpen(!isDevMenuOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                  activeTab !== 'shopping' && activeTab !== 'orders'
+                    ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 font-bold'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>Agent Lab</span>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+
+              {isDevMenuOpen && (
+                <div className="absolute top-full right-0 mt-2 w-64 p-2 rounded-xl bg-slate-950/95 border border-white/10 shadow-2xl backdrop-blur-2xl z-50 grid grid-cols-1 gap-1 text-xs font-mono">
+                  <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500">Agent Intelligence</div>
+                  <button onClick={() => { setActiveTab('brain'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧠 Brain &amp; LangGraph</button>
+                  <button onClick={() => { setActiveTab('specialized'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧩 Specialized Agents</button>
+                  <button onClick={() => { setActiveTab('memory'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">💾 4-Tier Memory &amp; Vector DB</button>
+                  <button onClick={() => { setActiveTab('observability'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">📈 Observability &amp; Waterfall</button>
+                  
+                  <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500 mt-1 border-t border-white/5 pt-1">Trust &amp; Infrastructure</div>
+                  <button onClick={() => { setActiveTab('merchants'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🏪 Merchant Simulator</button>
+                  <button onClick={() => { setActiveTab('gateway'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔌 Unified Gateway</button>
+                  <button onClick={() => { setActiveTab('payments'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">💳 Delegated Payments</button>
+                  <button onClick={() => { setActiveTab('security'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🛡️ Security &amp; Sanitizer</button>
+                  <button onClick={() => { setActiveTab('permissions'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔐 RBAC Permissions</button>
+                  <button onClick={() => { setActiveTab('resiliency'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔄 Failure Recovery</button>
+                  <button onClick={() => { setActiveTab('benchmark'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧪 Benchmark (TC01-TC12)</button>
+                  <button onClick={() => { setActiveTab('architecture'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🏗️ Architecture Topology</button>
+                  <button onClick={() => { setActiveTab('safety'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🛡️ Policies &amp; Audit</button>
+                  <button onClick={() => { setActiveTab('protocols'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🌐 UCP &amp; MCP Protocols</button>
+                </div>
+              )}
+            </div>
+          </nav>
+
+          {/* Top Right Actions */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200 hover:text-white"
+              title="Configure Real API Keys"
+            >
+              <Settings className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">API Keys</span>
+            </button>
+
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200"
+              title="View Cart"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Cart</span>
+              {cart?.items?.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">
+                  {cart.items.length}
+                </span>
+              )}
             </button>
           </div>
         </div>
