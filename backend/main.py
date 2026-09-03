@@ -453,6 +453,18 @@ async def update_profile_preferences(req: Dict[str, Any]):
     """Update Tier 1 User Profile Memory preferences."""
     return MemoryManager.update_profile(req)
 
+# -------------------------------------------------------------
+# 12. Agent Observability & Telemetry Endpoints
+# -------------------------------------------------------------
+from backend.agent.observability import (
+    AgentObservabilityEngine, ObservabilityTraceResponse
+)
+
+@app.get("/api/observability/latest", response_model=ObservabilityTraceResponse)
+async def get_latest_observability_trace():
+    """Retrieve operational execution trace and metrics KPI summary."""
+    return AgentObservabilityEngine.get_latest_session_trace()
+
 # Health endpoint
 @app.get("/api/health")
 async def health_check():
@@ -466,6 +478,7 @@ async def health_check():
         "security": "Untrusted Context Sanitizer & Agent Tool Permission Matrix (RBAC)",
         "resiliency": "Distributed Failure Recovery & Autonomous Replanning Engine (6 Scenarios)",
         "memory": "4-Tier Architecture (Profile, Transactions, Working State, Vector DB)",
+        "observability": "Operational Waterfall Execution Trace & Telemetry KPI Dashboard",
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }
