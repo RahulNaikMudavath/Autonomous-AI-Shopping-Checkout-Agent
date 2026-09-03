@@ -196,6 +196,29 @@ Order Agent        ✗     ✗       ✗       ✗
 └───────────────────────────────────────────────┘
 ```
 
+### 13. 🔮 Protocol-Aware Roadmap (Shopify UCP, MCP & Native Agent Protocols)
+
+```
+                    AgentCart
+                       │
+              ┌────────┴────────┐
+              │ Commerce Gateway│
+              └────────┬────────┘
+                       │
+            ┌──────────┼──────────┐
+            ↓          ↓          ↓
+          REST        MCP      UCP-style
+          APIs       Server    capability
+            │          │          │
+            └──────────┼──────────┘
+                       ↓
+                   Merchants
+```
+
+- **Protocol-Aware Integration**: Evolving from protocol-inspired simulation to native binding with **Shopify's UCP-oriented commerce tools** (catalog discovery, cart creation, dynamic checkout, and order monitoring).
+- **Model Context Protocol (MCP)**: Exposing standard tools (`search_products`, `create_cart`, `execute_checkout`) as reusable MCP server endpoints for third-party LLMs (Claude, GPT-4, Gemini).
+- **Delegated Authorization & Bounded Autonomy**: Pioneering policy-first delegated payments with India's emerging framework for rule-based autonomous agent transactions.
+
 ---
 
 ## 🚀 Quickstart Guide
