@@ -3,6 +3,8 @@ AgentCart Main Application
 FastAPI Server connecting all 5 layers:
 - User Experience APIs
 - Agent Intelligence: Hierarchical Multi-Agent Supervisor & Context Store
+- Specialized Agents: Agent 1 (Intent), Agent 2 (Planner), Agent 3 (Discovery)
+- Merchant Commerce REST APIs: Merchant A, B, C, D
 - Universal Commerce Protocol (UCP v1.0) & MCP Tools
 - Commerce Infrastructure (Merchants, Cart, Order Engine)
 - Trust & Safety Guardrails & Cryptographic Audit Ledger
@@ -17,10 +19,15 @@ from backend.schemas import (
     UserRequirements, RecommendationResult, Product, Cart, Order, SpendingPolicy,
     PolicyCheckResult, PromptInjectionScanResult, AuditBlock, MCPToolCallRequest, MCPToolCallResponse
 )
+from backend.agent.intent_agent import IntentAgent, StructuredIntentState
+from backend.agent.planning_agent import PlanningAgent, PlanningExecutionResult
 from backend.agent.supervisor import AgentSupervisor
 from backend.agent.context_store import ContextStore
+from backend.agent.subagents.discovery_agent import DiscoveryAgent
+from backend.agent.subagents.ranking_agent import RankingAgent
 from backend.agent.checkout_pipeline import CheckoutPipeline
 from backend.infrastructure.merchants import get_all_merchants, search_merchant_catalog
+from backend.infrastructure.merchant_apis import merchant_apis_router
 from backend.infrastructure.cart_order_engine import (
     get_or_create_cart, add_to_cart, remove_from_cart, clear_cart,
     get_all_orders, get_order_by_id, process_return_request
@@ -34,8 +41,8 @@ from backend.protocol.mcp_server import MCP_TOOLS_SPEC, handle_mcp_tool_call
 
 app = FastAPI(
     title="AgentCart - Autonomous AI Shopping & Checkout Agent",
-    description="5-Layer Autonomous Commerce Intelligence System with Hierarchical Agent Brain",
-    version="1.1.0"
+    description="5-Layer Autonomous Commerce Intelligence System with Specialized Agents & Dedicated Merchant APIs",
+    version="1.2.0"
 )
 
 # CORS Middleware
@@ -47,13 +54,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Protocol Sub-router
+# Include Routers
 app.include_router(ucp_router)
+app.include_router(merchant_apis_router)
 
 # Request payloads
 class ChatQueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = "session_default"
+
+class IntentParseRequest(BaseModel):
+    query: str
+
+class PlannerExecuteRequest(BaseModel):
+    query: str
+    cart_id: Optional[str] = "default_user_cart"
 
 class AddToCartRequest(BaseModel):
     cart_id: Optional[str] = "default_user_cart"
@@ -71,7 +86,50 @@ class TestInjectionRequest(BaseModel):
     prompt_text: str
 
 # -------------------------------------------------------------
-# 1. Shopping Assistant & Agent Brain Endpoints
+# 1. Specialized Agents (Intent Agent, Planning Agent) Endpoints
+# -------------------------------------------------------------
+
+@app.post("/api/agents/intent/parse", response_model=StructuredIntentState)
+async def parse_intent_to_state(req: IntentParseRequest):
+    """
+    Agent 1 — Intent Agent endpoint.
+    Converts 'I need a laptop for coding and AI under 1.2L' into exact structured state.
+    """
+    return IntentAgent.parse_query_to_state(req.query)
+
+@app.post("/api/agents/planner/execute-dag", response_model=PlanningExecutionResult)
+async def execute_planning_dag(req: PlannerExecuteRequest):
+    """
+    Agent 2 — Planning Agent endpoint.
+    Executes the 8-step commerce DAG sequentially with status updates.
+    """
+    intent_state = IntentAgent.parse_query_to_state(req.query)
+    
+    # Discovery wrapper
+    reqs_adapter = UserRequirements(
+        raw_query=req.query,
+        budget_max_inr=intent_state.budget.max,
+        min_ram_gb=intent_state.requirements.ram_gb.min if intent_state.requirements.ram_gb else 16,
+        min_ssd_gb=intent_state.requirements.storage_gb.min if intent_state.requirements.storage_gb else 512,
+        gpu_brand_preference=intent_state.requirements.gpu or "NVIDIA",
+        objective="best_value"
+    )
+
+    def run_discovery():
+        return DiscoveryAgent.discover_candidates(reqs_adapter)
+
+    def run_ranking(candidates):
+        return RankingAgent.rank_and_evaluate(candidates, reqs_adapter)
+
+    return PlanningAgent.execute_plan(
+        intent_state=intent_state,
+        discovery_fn=run_discovery,
+        ranking_fn=run_ranking,
+        cart_id=req.cart_id or "default_user_cart"
+    )
+
+# -------------------------------------------------------------
+# 2. Shopping Assistant & Agent Brain Endpoints
 # -------------------------------------------------------------
 
 @app.post("/api/chat", response_model=RecommendationResult)
@@ -103,7 +161,7 @@ async def get_catalog(category: Optional[str] = None, max_price: Optional[float]
     return search_merchant_catalog(category=category, max_price=max_price)
 
 # -------------------------------------------------------------
-# 2. Cart & Commerce Infrastructure Endpoints
+# 3. Cart & Commerce Infrastructure Endpoints
 # -------------------------------------------------------------
 
 @app.get("/api/cart", response_model=Cart)
@@ -161,7 +219,7 @@ async def direct_checkout(req: CheckoutDirectRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 # -------------------------------------------------------------
-# 3. Order Lifecycle & Return Management Endpoints
+# 4. Order Lifecycle & Return Management Endpoints
 # -------------------------------------------------------------
 
 @app.get("/api/orders", response_model=List[Order])
@@ -194,7 +252,7 @@ async def request_order_return(order_id: str, payload: Dict[str, str]):
     return order
 
 # -------------------------------------------------------------
-# 4. Trust & Safety, Policies & Cryptographic Ledger Endpoints
+# 5. Trust & Safety, Policies & Cryptographic Ledger Endpoints
 # -------------------------------------------------------------
 
 @app.get("/api/policy", response_model=SpendingPolicy)
@@ -223,7 +281,7 @@ async def verify_ledger():
     return verify_audit_ledger_integrity()
 
 # -------------------------------------------------------------
-# 5. MCP (Model Context Protocol) Server Tool Endpoints
+# 6. MCP (Model Context Protocol) Server Tool Endpoints
 # -------------------------------------------------------------
 
 @app.get("/api/mcp/tools")
@@ -243,7 +301,8 @@ async def health_check():
         "status": "healthy",
         "system": "AgentCart Autonomous AI Shopping & Checkout",
         "brain": "Hierarchical Multi-Agent Architecture",
-        "subagents": ["DiscoveryAgent", "RankingAgent", "MerchantAgent", "Supervisor"],
+        "specialized_agents": ["Agent 1: Intent Agent", "Agent 2: Planning Agent", "Agent 3: Discovery Agent"],
+        "merchant_apis": ["Merchant A (TechHub)", "Merchant B (ElectroBazaar)", "Merchant C (OmniStore)", "Merchant D (ProHardware)"],
         "layers": ["UX", "Intelligence", "Protocol", "Infrastructure", "Trust&Safety"],
         "merchants_online": len(get_all_merchants())
     }
