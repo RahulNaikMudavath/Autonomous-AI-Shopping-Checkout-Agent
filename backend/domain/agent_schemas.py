@@ -191,7 +191,7 @@ class NormalizedProductCandidate(BaseModel):
     inventory_state: AvailabilityState = AvailabilityState.IN_STOCK
     available_quantity: int = 0
     in_stock: bool = True
-    delivery_days: int = 3
+    delivery_days: Optional[int] = 3
     shipping_cost: Decimal = Decimal("0.00")
     shipping_option_name: Optional[str] = None
     shipping_options: List[Dict[str, Any]] = Field(default_factory=list)
@@ -233,7 +233,7 @@ class MerchantOffer(BaseModel):
     inventory_state: AvailabilityState = AvailabilityState.IN_STOCK
     available_quantity: int = 0
     in_stock: bool = True
-    delivery_days: int = 3
+    delivery_days: Optional[int] = 3
     shipping_cost: Decimal = Decimal("0.00")
     shipping_option_name: Optional[str] = None
     shipping_options: List[Dict[str, Any]] = Field(default_factory=list)
@@ -343,6 +343,58 @@ class ConstraintFilterResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class ScoreComponentBreakdown(BaseModel):
+    """
+    Detailed breakdown for a single scoring dimension on a 0.0 - 100.0 scale.
+    """
+    score: float = Field(..., ge=0.0, le=100.0, description="Normalized score 0-100")
+    weight: float = Field(..., ge=0.0, le=100.0, description="Component weight percentage 0-100")
+    weighted_score: float = Field(..., ge=0.0, le=100.0, description="(score * weight) / 100.0")
+    raw_value: Optional[Any] = None
+    description: Optional[str] = None
+
+
+class RankedProductCandidate(BaseModel):
+    """
+    Candidate product with computed deterministic rank, overall score, value score, component breakdown, and factual reasons.
+    """
+    candidate: NormalizedProductCandidate
+    rank: int = Field(..., ge=1)
+    overall_score: float = Field(..., ge=0.0, le=100.0)
+    value_score: float = Field(..., ge=0.0, le=100.0)
+    components: Dict[str, ScoreComponentBreakdown] = Field(default_factory=dict)
+    score_explanation: List[str] = Field(default_factory=list)
+    badge: Optional[str] = Field(default=None, description="e.g. 'TOP_PICK', 'BEST_VALUE', 'FASTEST_DELIVERY', 'RUNNER_UP'")
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class RankingResult(BaseModel):
+    """
+    Deterministic ranking result containing ordered candidates, best overall, best value, fastest delivery, and applied weights.
+    """
+    ranked_products: List[RankedProductCandidate] = Field(default_factory=list)
+    best_overall: Optional[RankedProductCandidate] = None
+    best_value: Optional[RankedProductCandidate] = None
+    fastest_delivery: Optional[RankedProductCandidate] = None
+    scoring_profile: str = "default_v1"
+    weights_applied: Dict[str, float] = Field(default_factory=dict)
+    total_candidates: int = 0
+    tie_break_policy: List[str] = Field(default_factory=list)
+    execution_time_ms: int = 0
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class RankingRequest(BaseModel):
+    intent: ShoppingIntent
+    products: List[NormalizedProductCandidate] = Field(default_factory=list)
+    scoring_profile: str = "default_v1"
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
 class MCDAScoreBreakdown(BaseModel):
     """
     Detailed multi-criteria scoring breakdown on a 0.0 - 10.0 scale.
@@ -363,7 +415,8 @@ class RecommendationItem(BaseModel):
     rank: int
     badge: str = Field(..., description="e.g. 'TOP_PICK', 'BEST_VALUE', 'FASTEST_DELIVERY', 'RUNNER_UP'")
     candidate: NormalizedProductCandidate
-    mcda_score: MCDAScoreBreakdown
+    mcda_score: Optional[MCDAScoreBreakdown] = None
+    ranked_candidate: Optional[RankedProductCandidate] = None
     reasons: List[str] = Field(default_factory=list)
     tradeoffs: List[str] = Field(default_factory=list)
     highlights: Dict[str, Any] = Field(default_factory=dict)

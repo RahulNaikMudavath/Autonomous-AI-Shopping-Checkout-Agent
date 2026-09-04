@@ -16,7 +16,8 @@ from backend.domain.agent_schemas import (
     AgentIntentRequest, AgentIntentResponse,
     AgentSessionRequest, AgentSessionResponse, ExecutionPlan,
     DiscoveryRequest, DiscoveryResult,
-    ConstraintFilterRequest, ConstraintFilterResult
+    ConstraintFilterRequest, ConstraintFilterResult,
+    RankingRequest, RankingResult
 )
 from backend.agent.intent_parser import IntentParser
 from backend.agent.workflow_planner import WorkflowPlanner
@@ -25,6 +26,7 @@ from backend.agent.agent_runner import ShoppingAgentRunner
 from backend.agent.agent_graph import ShoppingAgentGraph
 from backend.agent.discovery_service import DiscoveryService
 from backend.agent.constraint_engine import ConstraintEngine
+from backend.agent.ranking_engine import RankingEngine
 
 agent_router = APIRouter(prefix="/agent", tags=["Autonomous Shopping Agent"])
 
@@ -203,4 +205,39 @@ def filter_session_candidates(
     return ConstraintEngine.filter_products(
         candidates=request.products,
         intent=request.intent
+    )
+
+
+@agent_router.post(
+    "/rank",
+    response_model=RankingResult,
+    status_code=status.HTTP_200_OK,
+    summary="Deterministic MCDA Candidate Ranking",
+    description="Ranks constraint-valid product candidates using weighted Multi-Criteria Decision Analysis across specs, price efficiency, delivery speed, rating, discount, and inventory health."
+)
+def rank_candidates(
+    request: RankingRequest
+) -> RankingResult:
+    return RankingEngine.rank_products(
+        candidates=request.products,
+        intent=request.intent,
+        scoring_profile=request.scoring_profile
+    )
+
+
+@agent_router.post(
+    "/sessions/{session_id}/rank",
+    response_model=RankingResult,
+    status_code=status.HTTP_200_OK,
+    summary="Session-Scoped MCDA Candidate Ranking",
+    description="Ranks candidate products within an active agent session using Multi-Criteria Decision Analysis."
+)
+def rank_session_candidates(
+    session_id: str,
+    request: RankingRequest
+) -> RankingResult:
+    return RankingEngine.rank_products(
+        candidates=request.products,
+        intent=request.intent,
+        scoring_profile=request.scoring_profile
     )

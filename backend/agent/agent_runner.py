@@ -217,20 +217,21 @@ class ShoppingAgentRunner:
 
         # 7. MCDA Multi-Criteria Decision Analysis Ranking
         s7_start = time.perf_counter()
-        ranked_items = RankingEngine.rank_candidates(passing_candidates, intent)
+        ranking_res = RankingEngine.rank_products(passing_candidates, intent)
         s7_dur = int((time.perf_counter() - s7_start) * 1000)
 
-        top_score_str = f" (Top Pick Score: {ranked_items[0][1].composite_score}/10)" if ranked_items else ""
+        top_score_str = f" (Top Pick Score: {ranking_res.best_overall.overall_score:.1f}/100)" if ranking_res.best_overall else ""
         traces.append(AgentTraceStep(
             step_id="step_mcda_ranking",
             title="🎯 Ranking Engine: Multi-Criteria Decision Analysis",
             agent_name="RankingEngine",
             status="completed",
-            summary=f"Scored {len(ranked_items)} passing candidates using {intent.objective.value} weighting matrix{top_score_str}.",
+            summary=f"Scored {ranking_res.total_candidates} passing candidates using {intent.objective.value} weighting matrix{top_score_str}.",
             details={
                 "objective": intent.objective.value,
-                "ranked_count": len(ranked_items),
-                "top_score": ranked_items[0][1].composite_score if ranked_items else None
+                "ranked_count": ranking_res.total_candidates,
+                "top_score": ranking_res.best_overall.overall_score if ranking_res.best_overall else None,
+                "weights": ranking_res.weights_applied
             },
             execution_time_ms=s7_dur
         ))
@@ -238,7 +239,7 @@ class ShoppingAgentRunner:
         # 8. Explainable Recommendation Synthesis
         s8_start = time.perf_counter()
         recommendation_res = RecommendationEngine.synthesize_recommendations(
-            ranked_candidates=ranked_items,
+            ranked_candidates=ranking_res,
             intent=intent,
             session_id=session_id,
             plan=plan,

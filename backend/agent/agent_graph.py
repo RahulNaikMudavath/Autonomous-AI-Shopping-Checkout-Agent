@@ -312,6 +312,77 @@ class ShoppingAgentGraph:
         return state
 
     @classmethod
+    def rank_products_node(cls, state: ShoppingAgentState) -> ShoppingAgentState:
+        """
+        Step 5: Deterministic Multi-Criteria Decision Analysis (MCDA) Ranking.
+        Scores passing candidates across technical specs, price efficiency, delivery speed,
+        ratings, discounts, and inventory health. Zero LLM involvement.
+        """
+        if state.status == "FAILED" or not state.shopping_intent or not state.discovered_products:
+            return state
+
+        start_time = time.perf_counter()
+        try:
+            from backend.agent.ranking_engine import RankingEngine
+            rank_res = RankingEngine.rank_products(
+                candidates=state.discovered_products,
+                intent=state.shopping_intent
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # Store ranking result metadata
+            state.metadata["ranking"] = {
+                "total_candidates": rank_res.total_candidates,
+                "best_overall_id": rank_res.best_overall.candidate.id if rank_res.best_overall else None,
+                "best_overall_score": rank_res.best_overall.overall_score if rank_res.best_overall else None,
+                "best_value_id": rank_res.best_value.candidate.id if rank_res.best_value else None,
+                "fastest_delivery_id": rank_res.fastest_delivery.candidate.id if rank_res.fastest_delivery else None,
+                "scoring_profile": rank_res.scoring_profile,
+                "weights_applied": rank_res.weights_applied,
+                "execution_time_ms": elapsed_ms
+            }
+
+            # Update ordered discovered products list
+            state.discovered_products = [item.candidate for item in rank_res.ranked_products]
+
+            if state.execution_plan:
+                rank_step = next((s for s in state.execution_plan.steps if s.action == AgentAction.RANK_PRODUCTS), None)
+                if rank_step:
+                    rank_step.status = "COMPLETED"
+                    rank_step.execution_time_ms = elapsed_ms
+
+            top_title = rank_res.best_overall.candidate.title if rank_res.best_overall else "None"
+            top_score = rank_res.best_overall.overall_score if rank_res.best_overall else 0.0
+            state.trace_steps.append(AgentTraceStep(
+                step_id="step_mcda_ranking",
+                title="Deterministic MCDA Ranking",
+                agent_name="RankingEngine",
+                status="completed",
+                summary=f"Ranked {rank_res.total_candidates} candidates. Top pick: '{top_title[:40]}' (Score: {top_score:.1f}/100)",
+                details={
+                    "total_ranked": rank_res.total_candidates,
+                    "best_overall": top_title,
+                    "top_score": top_score,
+                    "best_value": rank_res.best_value.candidate.title if rank_res.best_value else None,
+                    "fastest_delivery": rank_res.fastest_delivery.candidate.title if rank_res.fastest_delivery else None,
+                    "weights": rank_res.weights_applied
+                },
+                execution_time_ms=elapsed_ms
+            ))
+        except Exception as e:
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            state.errors.append(f"RANKING_FAILED: {str(e)}")
+            state.trace_steps.append(AgentTraceStep(
+                step_id="step_mcda_ranking",
+                title="Deterministic MCDA Ranking",
+                agent_name="RankingEngine",
+                status="failed",
+                summary=f"Ranking failed: {str(e)}",
+                execution_time_ms=elapsed_ms
+            ))
+        return state
+
+    @classmethod
     def complete_node(cls, state: ShoppingAgentState) -> ShoppingAgentState:
         """Finalizes graph execution and sets completion state."""
         if state.status != "FAILED" and state.status != "CLARIFICATION_REQUIRED":
@@ -355,6 +426,7 @@ class ShoppingAgentGraph:
         elif route == "discovery":
             state = cls.discovery_node(state, db=db)
             state = cls.apply_hard_constraints_node(state)
+            state = cls.rank_products_node(state)
             state = cls.complete_node(state)
         elif route == "failure":
             state.status = "FAILED"

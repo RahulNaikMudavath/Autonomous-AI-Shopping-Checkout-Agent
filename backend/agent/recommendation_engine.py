@@ -9,11 +9,12 @@ Each recommendation contains verifiable bullet points grounded in authoritative 
 """
 from decimal import Decimal
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from backend.domain.agent_schemas import (
     ShoppingIntent, NormalizedProductCandidate, MCDAScoreBreakdown,
-    RecommendationItem, RecommendationResponse, AgentPlan, AgentTraceStep
+    RecommendationItem, RecommendationResponse, AgentPlan, AgentTraceStep,
+    RankingResult, RankedProductCandidate
 )
 
 logger = logging.getLogger("agentcart.agent.recommendations")
@@ -27,7 +28,7 @@ class RecommendationEngine:
     @classmethod
     def synthesize_recommendations(
         cls,
-        ranked_candidates: List[Tuple[NormalizedProductCandidate, MCDAScoreBreakdown]],
+        ranked_candidates: Union[RankingResult, List[Tuple[NormalizedProductCandidate, MCDAScoreBreakdown]]],
         intent: ShoppingIntent,
         session_id: str,
         task_id: Optional[str] = None,
@@ -38,7 +39,21 @@ class RecommendationEngine:
     ) -> RecommendationResponse:
         """
         Synthesizes the final recommendation response with verified reasons and trade-offs.
+        Supports both RankingResult and legacy List[Tuple[NormalizedProductCandidate, MCDAScoreBreakdown]].
         """
+        if isinstance(ranked_candidates, RankingResult):
+            return cls._synthesize_from_ranking_result(
+                ranking_result=ranked_candidates,
+                intent=intent,
+                session_id=session_id,
+                task_id=task_id,
+                plan=plan,
+                total_discovered=total_discovered,
+                rejected_counts=rejected_counts,
+                trace_steps=trace_steps
+            )
+
+        # Legacy Tuple List handling
         if not ranked_candidates:
             return RecommendationResponse(
                 session_id=session_id,
@@ -117,6 +132,121 @@ class RecommendationEngine:
         )
 
     @classmethod
+    def _synthesize_from_ranking_result(
+        cls,
+        ranking_result: RankingResult,
+        intent: ShoppingIntent,
+        session_id: str,
+        task_id: Optional[str] = None,
+        plan: Optional[AgentPlan] = None,
+        total_discovered: int = 0,
+        rejected_counts: Optional[Dict[str, int]] = None,
+        trace_steps: Optional[List[AgentTraceStep]] = None
+    ) -> RecommendationResponse:
+        """
+        Synthesizes recommendations directly from structured Phase 3 Step 6 RankingResult.
+        """
+        ranked_products = ranking_result.ranked_products
+
+        if not ranked_products:
+            return RecommendationResponse(
+                session_id=session_id,
+                task_id=task_id,
+                intent=intent,
+                plan=plan or AgentPlan(goal="Product Discovery & Ranking", total_steps=0, steps=[]),
+                total_candidates_discovered=total_discovered,
+                candidates_passing_constraints=0,
+                top_recommendation=None,
+                best_value_recommendation=None,
+                fastest_delivery_recommendation=None,
+                all_recommendations=[],
+                rejected_candidates_summary=rejected_counts or {},
+                trace=trace_steps or [],
+                requires_human_authorization=False,
+                authorization_reason="No matching products found satisfying all hard constraints."
+            )
+
+        # 1. Top Recommendation
+        top_ranked = ranking_result.best_overall or ranked_products[0]
+        top_item = cls._build_item_from_ranked(top_ranked, intent, badge="TOP_PICK")
+
+        # 2. Best Value Recommendation
+        best_val_ranked = ranking_result.best_value or top_ranked
+        best_val_item = cls._build_item_from_ranked(best_val_ranked, intent, badge="BEST_VALUE")
+
+        # 3. Fastest Delivery Recommendation
+        fastest_ranked = ranking_result.fastest_delivery or top_ranked
+        fastest_item = cls._build_item_from_ranked(fastest_ranked, intent, badge="FASTEST_DELIVERY")
+
+        # 4. All Recommendations
+        all_recs: List[RecommendationItem] = []
+        for item in ranked_products:
+            all_recs.append(cls._build_item_from_ranked(item, intent, badge=item.badge or "RUNNER_UP"))
+
+        top_cand = top_ranked.candidate
+        return RecommendationResponse(
+            session_id=session_id,
+            task_id=task_id,
+            intent=intent,
+            plan=plan or AgentPlan(goal="Product Discovery & Ranking", total_steps=0, steps=[]),
+            total_candidates_discovered=total_discovered or ranking_result.total_candidates,
+            candidates_passing_constraints=len(ranked_products),
+            top_recommendation=top_item,
+            best_value_recommendation=best_val_item,
+            fastest_delivery_recommendation=fastest_item,
+            all_recommendations=all_recs,
+            rejected_candidates_summary=rejected_counts or {},
+            trace=trace_steps or [],
+            requires_human_authorization=True,
+            authorization_reason=f"Confirm authorization to add '{top_cand.title}' (₹{top_cand.current_price:,.2f}) to {top_cand.merchant_name} cart and proceed to checkout preparation."
+        )
+
+    @classmethod
+    def _build_item_from_ranked(
+        cls,
+        ranked: RankedProductCandidate,
+        intent: ShoppingIntent,
+        badge: str
+    ) -> RecommendationItem:
+        candidate = ranked.candidate
+        tradeoffs = []
+        if candidate.delivery_days and candidate.delivery_days > 2:
+            tradeoffs.append(f"Standard shipping ETA is {candidate.delivery_days} business days")
+        if candidate.current_price > Decimal("100000.00"):
+            tradeoffs.append("Premium workstation tier — triggers delegated step-up authorization")
+
+        # Generate legacy MCDAScoreBreakdown for compatibility
+        legacy_mcda = MCDAScoreBreakdown(
+            performance_score=round(ranked.components.get("specification", {}).score / 10.0 if "specification" in ranked.components else 7.0, 2),
+            price_efficiency_score=round(ranked.components.get("price", {}).score / 10.0 if "price" in ranked.components else 7.0, 2),
+            delivery_score=round(ranked.components.get("delivery", {}).score / 10.0 if "delivery" in ranked.components else 7.0, 2),
+            rating_score=round(ranked.components.get("rating", {}).score / 10.0 if "rating" in ranked.components else 7.0, 2),
+            brand_affinity_score=round(7.0, 2),
+            composite_score=round(ranked.overall_score / 10.0, 2),
+            score_justification={"overall_score": ranked.overall_score, "value_score": ranked.value_score}
+        )
+
+        return RecommendationItem(
+            rank=ranked.rank,
+            badge=badge,
+            candidate=candidate,
+            mcda_score=legacy_mcda,
+            ranked_candidate=ranked,
+            reasons=ranked.score_explanation,
+            tradeoffs=tradeoffs,
+            highlights={
+                "merchant": candidate.merchant_name,
+                "price": str(candidate.current_price),
+                "ram_gb": candidate.specs.get("ram_gb"),
+                "ssd_gb": candidate.specs.get("ssd_gb"),
+                "gpu": candidate.specs.get("gpu"),
+                "delivery_days": candidate.delivery_days,
+                "composite_score": ranked.overall_score,
+                "value_score": ranked.value_score
+            }
+        )
+
+    @classmethod
     def _build_recommendation_item(
         cls,
         candidate: NormalizedProductCandidate,
@@ -157,7 +287,7 @@ class RecommendationEngine:
         reasons.append(f"{candidate.merchant_name} merchant rating: {candidate.rating} ⭐ ({candidate.review_count:,} reviews)")
 
         # 4. Trade-off considerations
-        if candidate.delivery_days > 2:
+        if candidate.delivery_days and candidate.delivery_days > 2:
             tradeoffs.append(f"Standard shipping ETA is {candidate.delivery_days} business days")
         if candidate.current_price > Decimal("100000.00"):
             tradeoffs.append("Premium workstation tier — triggers delegated step-up authorization")
@@ -209,8 +339,9 @@ class RecommendationEngine:
         min_days = 999
 
         for cand, score in ranked:
-            if cand.delivery_days < min_days:
-                min_days = cand.delivery_days
+            days = cand.delivery_days if cand.delivery_days is not None else 999
+            if days < min_days:
+                min_days = days
                 best_item = (cand, score)
 
         return best_item
