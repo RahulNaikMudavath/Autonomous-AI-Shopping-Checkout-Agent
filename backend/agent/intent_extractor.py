@@ -2,10 +2,14 @@
 Layer 2: Agent Brain - Intent Extractor
 Extracts structured intent, technical constraints, priorities, and multi-turn refinements.
 """
+from __future__ import annotations
 import re
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from backend.schemas import UserRequirements
 from backend.agent.context_store import ContextStore
+
+Tuple_Result = Tuple[str, UserRequirements]
+
 
 class IntentExtractor:
     @staticmethod
@@ -105,6 +109,3 @@ class IntentExtractor:
         ContextStore.set_scratchpad_value(session_id, "last_action_type", action_type)
 
         return action_type, reqs
-
-# Type alias helper
-Tuple_Result = tuple[str, UserRequirements]

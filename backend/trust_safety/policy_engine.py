@@ -152,14 +152,21 @@ def calculate_block_hash(
     return hashlib.sha256(raw_data.encode("utf-8")).hexdigest()
 
 def add_audit_log(
-    action_type: str,
-    actor: str,
-    payload_summary: str,
-    policy_verified: bool = True
+    action_type: Optional[str] = None,
+    actor: str = "AGENT",
+    payload_summary: str = "",
+    policy_verified: bool = True,
+    action: Optional[str] = None,
+    status: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None
 ) -> AuditBlock:
     """
     Appends a cryptographically verified SHA-256 block to the immutable audit ledger.
     """
+    final_action = action_type or action or "SYSTEM_EVENT"
+    final_summary = payload_summary or (str(details) if details else "")
+    final_verified = policy_verified if status is None else (status == "PASSED")
+
     index = len(AUDIT_LEDGER)
     timestamp = datetime.now(timezone.utc).isoformat()
     previous_hash = AUDIT_LEDGER[-1].current_hash if AUDIT_LEDGER else GENESIS_HASH
@@ -167,21 +174,21 @@ def add_audit_log(
     current_hash = calculate_block_hash(
         index=index,
         timestamp=timestamp,
-        action_type=action_type,
+        action_type=final_action,
         actor=actor,
-        payload_summary=payload_summary,
+        payload_summary=final_summary,
         previous_hash=previous_hash
     )
     
     block = AuditBlock(
         block_index=index,
         timestamp=timestamp,
-        action_type=action_type,
+        action_type=final_action,
         actor=actor,
-        payload_summary=payload_summary,
+        payload_summary=final_summary,
         previous_hash=previous_hash,
         current_hash=current_hash,
-        policy_verified=policy_verified
+        policy_verified=final_verified
     )
     AUDIT_LEDGER.append(block)
     return block

@@ -119,6 +119,10 @@ class AuditBlock(BaseModel):
     current_hash: str
     policy_verified: bool = True
 
+    @property
+    def index(self) -> int:
+        return self.block_index
+
 # --- Layer 4: Cart & Orders ---
 class CartItem(BaseModel):
     product: Product

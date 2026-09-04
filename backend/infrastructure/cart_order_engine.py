@@ -103,18 +103,20 @@ def execute_order_checkout(
     product: Product,
     payment_method: str = "UPI (Tokenized)",
     shipping_address: str = "Rahul N., Flat 402, HighTech Tech Park, Bangalore 560100",
-    audit_hash: str = ""
+    audit_hash: str = "",
+    quote: Optional[CheckoutQuote] = None
 ) -> Order:
     order_id = f"ORD_{uuid.uuid4().hex[:8].upper()}"
     now = datetime.now(timezone.utc)
     eta = (now + timedelta(days=product.delivery_days)).strftime("%A, %B %d, %Y")
+    amount = quote.amount_inr if quote is not None else product.price_inr
     
     order = Order(
         order_id=order_id,
         merchant_id=product.merchant_id,
         merchant_name=product.merchant_name,
         product=product,
-        amount_inr=product.price_inr,
+        amount_inr=amount,
         payment_method=payment_method,
         payment_status="AUTHORIZED",
         order_status="CONFIRMED",

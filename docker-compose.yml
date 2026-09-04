@@ -12,6 +12,7 @@ services:
       - APP_NAME=AgentCart API
       - ENVIRONMENT=development
       - DEBUG=true
+      - PYTHONPATH=/app
       - DATABASE_URL=postgresql://agentcart:securepass@postgres:5432/agentcart_db
       - REDIS_URL=redis://redis:6379/0
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
@@ -24,6 +25,10 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./tests:/app/tests
+      - ./pytest.ini:/app/pytest.ini
+      - ./Dockerfile:/app/Dockerfile
+      - ./docker-compose.yml:/app/docker-compose.yml
+      - ./.github:/app/.github
     restart: unless-stopped
     command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 

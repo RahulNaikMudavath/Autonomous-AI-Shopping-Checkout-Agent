@@ -3,7 +3,8 @@ Layer 2 & 4: Agent Brain - Stage-Gated Checkout Pipeline
 Coordinates the autonomous execution lifecycle:
 Cart ➔ Checkout ➔ Authorization ➔ Payment ➔ Order
 """
-from typing import Dict, Any, Tuple, Optional
+from __future__ import annotations
+from typing import Dict, Any, Tuple, Optional, List
 from datetime import datetime, timezone
 from backend.schemas import Product, Cart, CheckoutQuote, Order, PolicyCheckResult, TraceStep
 from backend.infrastructure.cart_order_engine import (
@@ -11,6 +12,9 @@ from backend.infrastructure.cart_order_engine import (
 )
 from backend.trust_safety.policy_engine import evaluate_spending_policy, add_audit_log
 from backend.agent.context_store import ContextStore
+
+List_TraceSteps = List[TraceStep]
+
 
 class CheckoutPipeline:
     @staticmethod
@@ -58,44 +62,52 @@ class CheckoutPipeline:
         ContextStore.set_active_stage(session_id, "AUTHORIZATION")
         if not policy_check.passed:
             traces.append(TraceStep(
-                step_id="stage_authorization",
-                title="🛡️ Stage 3: Authorization Boundary Blocked",
+                step_id="stage_auth_failed",
+                title="🛡️ Stage 3: Spending Policy Violation",
                 status="failed",
-                summary=f"Transaction blocked: {'; '.join(policy_check.policy_violations)}",
-                details=policy_check.model_dump(),
+                summary=f"Blocked: {', '.join(policy_check.policy_violations)}",
+                execution_time_ms=12
+            ))
+            raise ValueError(f"Autonomous checkout policy rejected: {policy_check.policy_violations}")
+
+        if policy_check.requires_human_approval and not user_confirmed:
+            traces.append(TraceStep(
+                step_id="stage_auth_hitl",
+                title="👤 Stage 3: Human-in-the-Loop Approval Required",
+                status="warning",
+                summary=f"Item ₹{product.price_inr:,.2f} exceeds auto-approval threshold. Confirmation requested.",
                 execution_time_ms=15
             ))
-            raise ValueError(f"Authorization Blocked: {'; '.join(policy_check.policy_violations)}")
+            raise PermissionError("Human confirmation required for high-value purchase.")
 
         traces.append(TraceStep(
-            step_id="stage_authorization",
-            title="🛡️ Stage 3: Spending & Policy Authorization",
+            step_id="stage_auth_passed",
+            title="✅ Stage 3: Spending & Policy Authorization Granted",
             status="completed",
-            summary=f"Policy verified passed. Single-item threshold: {'Human Approved' if user_confirmed else 'Auto-Approved'}.",
-            details=policy_check.model_dump(),
-            execution_time_ms=16
+            summary="Policy evaluated: Item within verified budget & velocity bounds.",
+            execution_time_ms=14
         ))
 
-        # 4. Stage: Payment Execution
+        # 4. Stage: Payment & Cryptographic Ledger
         ContextStore.set_active_stage(session_id, "PAYMENT")
         audit_block = add_audit_log(
-            action_type="PAYMENT_TOKEN_CHARGED",
-            actor="AGENT_PAYMENT_GATEWAY",
-            payload_summary=f"Charged ₹{product.price_inr:,.2f} via {payment_method} to {product.merchant_name}",
-            policy_verified=True
+            action=f"EXECUTE_PURCHASE_{product.id}",
+            status="PASSED",
+            details={"product": product.title, "amount": quote.amount_inr, "method": payment_method}
         )
         traces.append(TraceStep(
-            step_id="stage_payment",
-            title="💳 Stage 4: Tokenized Payment Settled",
+            step_id="stage_payment_executed",
+            title="💳 Stage 4: Tokenized Payment & Ledger Stamped",
             status="completed",
-            summary=f"Processed tokenized payment via {payment_method}. Cryptographic audit stamp created.",
-            details={"payment_method": payment_method, "audit_hash": audit_block.current_hash[:16] + "..."},
-            execution_time_ms=28
+            summary=f"Paid ₹{quote.amount_inr:,.2f} via {payment_method}. Ledger block #{audit_block.block_index} SHA-256 anchored.",
+            details={"block_index": audit_block.block_index, "hash": audit_block.current_hash[:16] + "..."},
+            execution_time_ms=35
         ))
 
-        # 5. Stage: Order Lifecycle & Carrier Dispatch
+        # 5. Stage: Order Placement
         ContextStore.set_active_stage(session_id, "ORDER")
         order = execute_order_checkout(
+            quote=quote,
             product=product,
             payment_method=payment_method,
             shipping_address=final_address,
@@ -111,5 +123,3 @@ class CheckoutPipeline:
         ))
 
         return order, traces
-
-List_TraceSteps = list[TraceStep]

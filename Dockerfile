@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY tests/ ./tests/
 COPY alembic.ini .
+COPY pytest.ini .
 
 # Expose backend port
 EXPOSE 8000
@@ -25,6 +26,7 @@ EXPOSE 8000
 # Environment defaults
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=development
+ENV PYTHONPATH=/app
 
 # Run FastAPI server
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
