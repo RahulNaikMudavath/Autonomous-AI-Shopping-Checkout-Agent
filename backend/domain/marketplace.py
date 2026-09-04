@@ -241,6 +241,7 @@ class ShippingOptionDetail(BaseModel):
 class CartItemCreate(BaseModel):
     product_id: str
     quantity: int = Field(default=1, ge=1, le=100)
+    expected_price: Optional[Decimal] = None
 
 
 class CartItemUpdate(BaseModel):
@@ -257,6 +258,8 @@ class CartItemDetail(BaseModel):
     quantity: int
     unit_price: Decimal
     total_price: Decimal
+    is_available: bool = True
+    available_quantity: Optional[int] = None
     created_at: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -271,6 +274,7 @@ class CartDetail(BaseModel):
     id: str
     merchant_id: str
     merchant_code: Optional[str] = None
+    merchant_name: Optional[str] = None
     session_id: Optional[str] = None
     items: List[CartItemDetail] = Field(default_factory=list)
     items_count: int = 0
@@ -281,6 +285,8 @@ class CartDetail(BaseModel):
     grand_total: Decimal = Decimal("0.00")
     currency: str = "INR"
     status: CartStatus = CartStatus.ACTIVE
+    is_stale: bool = False
+    warnings: List[str] = Field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

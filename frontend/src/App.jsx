@@ -260,6 +260,34 @@ export default function App() {
     }
   };
 
+  const handleUpdateCartItemQuantity = async (item, newQuantity) => {
+    if (!item) return;
+    const itemId = item.id || item.product_id || item.product?.id;
+    try {
+      if (cart && cart.id) {
+        const res = await fetch(`${API_BASE}/api/v1/carts/${cart.id}/items/${itemId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ quantity: Math.max(0, newQuantity) })
+        });
+        if (res.ok) {
+          const updatedCart = await res.json();
+          setCart(updatedCart);
+          if (newQuantity === 0) {
+            triggerToast('🗑️ Item removed from cart');
+          }
+          return;
+        } else {
+          const err = await res.json().catch(() => ({}));
+          triggerToast(`⚠️ ${err.error?.message || err.detail || 'Could not update quantity'}`);
+        }
+      }
+    } catch (err) {
+      console.error("Error updating cart item quantity:", err);
+      triggerToast('❌ Network error updating cart item');
+    }
+  };
+
   const handleRemoveFromCart = async (productId) => {
     try {
       if (cart && cart.id) {
@@ -269,6 +297,7 @@ export default function App() {
         if (res.ok) {
           const updatedCart = await res.json();
           setCart(updatedCart);
+          triggerToast('🗑️ Item removed from cart');
           return;
         }
       }
@@ -276,6 +305,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/api/cart/items/${productId}`, { method: 'DELETE' }).catch(() => null);
       if (res && res.ok) {
         setCart(await res.json());
+        triggerToast('🗑️ Item removed from cart');
       }
     } catch (err) {
       console.error(err);
@@ -287,13 +317,18 @@ export default function App() {
       if (cart && cart.id) {
         const res = await fetch(`${API_BASE}/api/v1/carts/${cart.id}`, { method: 'DELETE' });
         if (res.ok) {
-          setCart(await res.json());
+          const updatedCart = await res.json();
+          setCart(updatedCart);
+          triggerToast('🧹 Cart cleared');
           return;
         }
       }
       // Fallback
       const res = await fetch(`${API_BASE}/api/cart`, { method: 'DELETE' }).catch(() => null);
-      if (res && res.ok) setCart(await res.json());
+      if (res && res.ok) {
+        setCart(await res.json());
+        triggerToast('🧹 Cart cleared');
+      }
     } catch (err) {
       console.error(err);
     }
@@ -1294,10 +1329,11 @@ export default function App() {
         onClose={() => setIsCartOpen(false)}
         cart={cart}
         onRemoveItem={handleRemoveFromCart}
+        onUpdateQuantity={handleUpdateCartItemQuantity}
         onClearCart={handleClearCart}
-        onProceedToCheckout={() => {
+        onCheckout={() => {
           if (cart?.items?.[0]) {
-            handleInstantBuy(cart.items[0].product);
+            handleInstantBuy(cart.items[0].product || cart.items[0]);
             setIsCartOpen(false);
           }
         }}

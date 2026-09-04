@@ -1,6 +1,7 @@
 """
-Phase 2: Shopping Cart API Endpoints
-Provides stateful multi-merchant cart manipulation with server-side inventory verification and price recalculation.
+Phase 2 & Phase 4: Shopping Cart API Endpoints
+Provides stateful multi-merchant cart manipulation with server-side inventory verification,
+live price recalculation, horizontal ownership security, and deterministic cart management.
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, status
@@ -35,22 +36,22 @@ def select_recommendation_and_add_to_cart(
     "",
     response_model=CartDetail,
     status_code=status.HTTP_201_CREATED,
-    summary="Create Merchant Cart",
-    description="Creates an isolated, stateful cart dedicated to a specific merchant (e.g. Amazon, Flipkart, Croma)."
+    summary="Create or Reuse Merchant Cart",
+    description="Creates or reuses an isolated, stateful active cart dedicated to a specific merchant (e.g. Amazon, Flipkart, Croma)."
 )
 def create_cart(
     request: CartCreateRequest,
     db: Session = Depends(get_db_session)
 ) -> CartDetail:
-    cart = CartService.create_cart(db, request.merchant_code, request.session_id)
-    return CartService.to_dto(cart)
+    cart = CartService.get_or_create_active_cart(db, request.merchant_code, request.session_id)
+    return CartService.to_dto(cart, db=db)
 
 
 @carts_router.get(
     "/{cart_id}",
     response_model=CartDetail,
     summary="Get Cart",
-    description="Retrieves cart contents and recalculates item totals, subtotals, and taxes server-side."
+    description="Retrieves cart contents and recalculates item totals, subtotals, and taxes server-side against live prices."
 )
 def get_cart(
     cart_id: str,
@@ -60,29 +61,31 @@ def get_cart(
     if not cart:
         raise EntityNotFoundException("Cart", cart_id)
     CartService.recalculate_cart(db, cart)
-    return CartService.to_dto(cart)
+    return CartService.to_dto(cart, db=db)
 
 
 @carts_router.post(
     "/{cart_id}/items",
     response_model=CartDetail,
     summary="Add Item to Cart",
-    description="Adds a product to the designated merchant cart, verifying stock availability and merchant isolation."
+    description="Adds a product to the designated merchant cart, verifying live stock availability and merchant isolation."
 )
 def add_item_to_cart(
     cart_id: str,
     item_req: CartItemCreate,
     db: Session = Depends(get_db_session)
 ) -> CartDetail:
-    cart = CartService.add_item_to_cart(db, cart_id, item_req.product_id, item_req.quantity)
-    return CartService.to_dto(cart)
+    cart = CartService.add_item_to_cart(
+        db, cart_id, item_req.product_id, item_req.quantity, item_req.expected_price
+    )
+    return CartService.to_dto(cart, db=db)
 
 
 @carts_router.patch(
     "/{cart_id}/items/{item_id}",
     response_model=CartDetail,
     summary="Update Cart Item Quantity",
-    description="Modifies item quantity in cart. Setting quantity to 0 removes the line item."
+    description="Modifies item quantity in cart. Setting quantity to 0 removes the line item. Validates item ownership and stock."
 )
 def update_cart_item(
     cart_id: str,
@@ -91,14 +94,14 @@ def update_cart_item(
     db: Session = Depends(get_db_session)
 ) -> CartDetail:
     cart = CartService.update_cart_item(db, cart_id, item_id, update_req.quantity)
-    return CartService.to_dto(cart)
+    return CartService.to_dto(cart, db=db)
 
 
 @carts_router.delete(
     "/{cart_id}/items/{item_id}",
     response_model=CartDetail,
     summary="Remove Cart Item",
-    description="Removes a specific line item from the shopping cart."
+    description="Removes a specific line item from the shopping cart after verifying cart item ownership."
 )
 def remove_cart_item(
     cart_id: str,
@@ -106,18 +109,32 @@ def remove_cart_item(
     db: Session = Depends(get_db_session)
 ) -> CartDetail:
     cart = CartService.remove_cart_item(db, cart_id, item_id)
-    return CartService.to_dto(cart)
+    return CartService.to_dto(cart, db=db)
 
 
 @carts_router.delete(
     "/{cart_id}",
     response_model=CartDetail,
     summary="Clear Cart",
-    description="Empties all items from the shopping cart."
+    description="Empties all items from the shopping cart and resets calculated monetary totals."
 )
 def clear_cart(
     cart_id: str,
     db: Session = Depends(get_db_session)
 ) -> CartDetail:
     cart = CartService.clear_cart(db, cart_id)
-    return CartService.to_dto(cart)
+    return CartService.to_dto(cart, db=db)
+
+
+@carts_router.post(
+    "/{cart_id}/clear",
+    response_model=CartDetail,
+    summary="Clear Cart (Action)",
+    description="Action endpoint to empty all items from the shopping cart and reset totals."
+)
+def clear_cart_action(
+    cart_id: str,
+    db: Session = Depends(get_db_session)
+) -> CartDetail:
+    cart = CartService.clear_cart(db, cart_id)
+    return CartService.to_dto(cart, db=db)
