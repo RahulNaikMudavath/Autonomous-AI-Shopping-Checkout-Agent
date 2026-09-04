@@ -2,6 +2,7 @@
 Phase 2: Checkout Preparation & Pre-Purchase Validation Service
 Performs authoritative re-validation of inventory, pricing, promotions, and shipping before order placement.
 Creates server-signed CheckoutSession records.
+Enforces strict merchant isolation and server-authoritative calculations.
 """
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
@@ -55,8 +56,8 @@ class CheckoutService:
         2. Re-check live inventory availability for all items.
         3. Recalculate subtotal using authoritative product catalog prices.
         4. Authoritatively evaluate promo code discounts.
-        5. Calculate server-side shipping cost.
-        6. Compute applicable taxes and final total.
+        5. Authoritatively evaluate and validate shipping option with strict merchant isolation.
+        6. Compute applicable taxes (18% GST) and grand total.
         7. Persist CheckoutSession with 15-minute TTL.
         8. Return validated CheckoutSummaryResponse.
         """
@@ -128,32 +129,63 @@ class CheckoutService:
             subtotal=subtotal
         )
 
-        # 5. Authoritative Shipping Evaluation
-        shipping_cost = ShippingService.calculate_shipping_cost(
-            db=db,
-            merchant_id=merchant.id,
-            shipping_option_id=request.shipping_option_id,
-            subtotal=subtotal
-        )
-
-        # Selected Shipping Option Details
+        # 5. Authoritative Shipping Evaluation & Strict Merchant Boundary Isolation
         selected_shipping_opt = None
-        if request.shipping_option_id:
-            opt = ShippingService.get_shipping_option_by_id(db, request.shipping_option_id)
-            if opt:
-                selected_shipping_opt = ShippingOptionDetail(
-                    id=opt.id,
-                    merchant_id=opt.merchant_id,
-                    code=opt.code,
-                    name=opt.name,
-                    cost=quantize_money(opt.cost),
-                    estimated_days=opt.estimated_days,
-                    delivery_type=opt.delivery_type,
-                    is_active=opt.is_active
-                )
+        shipping_cost = ZERO
+        effective_shipping_option_id = None
 
-        # 6. Tax & Grand Total Computation
-        tax_amount = PricingService.calculate_tax(subtotal - discount_amount)
+        if request.shipping_option_id and request.shipping_option_id.strip():
+            # Validate shipping option strictly belongs to cart's merchant
+            shipping_option_model = ShippingService.validate_shipping_option_for_merchant(
+                db=db,
+                merchant_id=merchant.id,
+                shipping_option_id=request.shipping_option_id.strip()
+            )
+            shipping_cost = ShippingService.calculate_shipping_cost_for_option(
+                option=shipping_option_model,
+                subtotal=subtotal
+            )
+            selected_shipping_opt = ShippingOptionDetail(
+                id=shipping_option_model.id,
+                merchant_id=shipping_option_model.merchant_id,
+                code=shipping_option_model.code,
+                name=shipping_option_model.name,
+                cost=quantize_money(shipping_option_model.cost),
+                estimated_days=shipping_option_model.estimated_days,
+                delivery_type=shipping_option_model.delivery_type,
+                is_active=shipping_option_model.is_active
+            )
+            effective_shipping_option_id = shipping_option_model.id
+        else:
+            # Default to cheapest active shipping option for the cart's merchant
+            default_opt = db.query(ShippingOptionModel).filter(
+                ShippingOptionModel.merchant_id == merchant.id,
+                ShippingOptionModel.is_active == True
+            ).order_by(ShippingOptionModel.cost.asc()).first()
+
+            if default_opt:
+                shipping_cost = ShippingService.calculate_shipping_cost_for_option(
+                    option=default_opt,
+                    subtotal=subtotal
+                )
+                selected_shipping_opt = ShippingOptionDetail(
+                    id=default_opt.id,
+                    merchant_id=default_opt.merchant_id,
+                    code=default_opt.code,
+                    name=default_opt.name,
+                    cost=quantize_money(default_opt.cost),
+                    estimated_days=default_opt.estimated_days,
+                    delivery_type=default_opt.delivery_type,
+                    is_active=default_opt.is_active
+                )
+                effective_shipping_option_id = default_opt.id
+            else:
+                shipping_cost = ZERO
+                effective_shipping_option_id = None
+
+        # 6. Tax & Grand Total Computation (Exact Formula: subtotal - discount + shipping + tax)
+        taxable_base = max(ZERO, subtotal - discount_amount)
+        tax_amount = PricingService.calculate_tax(taxable_base)
         grand_total = PricingService.compute_grand_total(
             subtotal=subtotal,
             discount=discount_amount,
@@ -175,7 +207,7 @@ class CheckoutService:
             tax_total=tax_amount,
             grand_total=grand_total,
             currency="INR",
-            shipping_option_id=request.shipping_option_id,
+            shipping_option_id=effective_shipping_option_id,
             promo_code=request.promo_code if discount_model else None,
             items_snapshot=items_snapshot,
             status="PENDING",
@@ -187,8 +219,8 @@ class CheckoutService:
         db.refresh(checkout_session)
 
         logger.info(
-            "Prepared CheckoutSession %s for merchant %s. Subtotal: ₹%s, Grand Total: ₹%s",
-            checkout_session.id, merchant.merchant_code, subtotal, grand_total
+            "Prepared CheckoutSession %s for merchant %s. Subtotal: ₹%s, Shipping: ₹%s, Tax: ₹%s, Grand Total: ₹%s",
+            checkout_session.id, merchant.merchant_code, subtotal, shipping_cost, tax_amount, grand_total
         )
 
         return CheckoutSummaryResponse(

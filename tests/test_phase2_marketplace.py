@@ -380,7 +380,7 @@ async def test_multi_merchant_cart_isolation_and_flow():
 
 
 # =====================================================================
-# 8. Checkout Preparation Tests
+# 8. Checkout Preparation & Cross-Merchant Shipping Isolation Tests
 # =====================================================================
 
 @pytest.mark.asyncio
@@ -420,6 +420,168 @@ async def test_checkout_preparation_empty_cart_rejected():
         prep_res = await ac.post("/api/v1/checkout/prepare", json={"cart_id": cart_id})
         assert prep_res.status_code == 400
         assert prep_res.json()["error"]["code"] == "EMPTY_CART"
+
+
+@pytest.mark.asyncio
+async def test_checkout_shipping_isolation_amazon_with_flipkart_rejected():
+    """Regression test: Passing a Flipkart shipping option to an Amazon cart MUST be rejected with 400 MERCHANT_MISMATCH."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # 1. Create Amazon Cart
+        c_res = await ac.post("/api/v1/carts", json={"merchant_code": "AMAZON"})
+        cart_id = c_res.json()["id"]
+        p_res = await ac.get("/api/v1/products?merchant_code=AMAZON&category=laptops")
+        prod = p_res.json()["items"][0]
+        await ac.post(f"/api/v1/carts/{cart_id}/items", json={"product_id": prod["id"], "quantity": 1})
+
+        # 2. Fetch Flipkart Shipping Options
+        flp_ship_res = await ac.get("/api/v1/shipping-options?merchant_code=FLIPKART")
+        assert flp_ship_res.status_code == 200
+        flipkart_shipping_opt = flp_ship_res.json()[0]
+        flp_ship_id = flipkart_shipping_opt["id"]
+
+        # 3. Attempt to prepare Amazon checkout using Flipkart shipping option ID
+        prep_res = await ac.post("/api/v1/checkout/prepare", json={
+            "cart_id": cart_id,
+            "shipping_option_id": flp_ship_id
+        })
+        assert prep_res.status_code == 400
+        err = prep_res.json()["error"]
+        assert err["code"] == "MERCHANT_MISMATCH"
+        assert "Cross-merchant shipping options are strictly prohibited" in err["message"] or "does not belong to merchant" in err["message"]
+
+
+@pytest.mark.asyncio
+async def test_checkout_shipping_isolation_amazon_with_croma_rejected():
+    """Regression test: Passing a Croma shipping option to an Amazon cart MUST be rejected with 400 MERCHANT_MISMATCH."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # 1. Create Amazon Cart
+        c_res = await ac.post("/api/v1/carts", json={"merchant_code": "AMAZON"})
+        cart_id = c_res.json()["id"]
+        p_res = await ac.get("/api/v1/products?merchant_code=AMAZON&category=laptops")
+        prod = p_res.json()["items"][0]
+        await ac.post(f"/api/v1/carts/{cart_id}/items", json={"product_id": prod["id"], "quantity": 1})
+
+        # 2. Fetch Croma Shipping Options
+        cro_ship_res = await ac.get("/api/v1/shipping-options?merchant_code=CROMA")
+        assert cro_ship_res.status_code == 200
+        croma_shipping_opt = cro_ship_res.json()[0]
+        cro_ship_id = croma_shipping_opt["id"]
+
+        # 3. Attempt Amazon checkout with Croma shipping
+        prep_res = await ac.post("/api/v1/checkout/prepare", json={
+            "cart_id": cart_id,
+            "shipping_option_id": cro_ship_id
+        })
+        assert prep_res.status_code == 400
+        assert prep_res.json()["error"]["code"] == "MERCHANT_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_checkout_shipping_amazon_prime_express_accepted_with_correct_totals():
+    """Regression test: Amazon cart + Amazon Prime Express (₹99.00) produces shipping_total=99.00 and exact grand_total."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # 1. Create Amazon Cart & add ROG Strix G16 (₹109,999.00)
+        c_res = await ac.post("/api/v1/carts", json={"merchant_code": "AMAZON"})
+        cart_id = c_res.json()["id"]
+        p_res = await ac.get("/api/v1/products?merchant_code=AMAZON&query=ROG")
+        prod = p_res.json()["items"][0]
+        await ac.post(f"/api/v1/carts/{cart_id}/items", json={"product_id": prod["id"], "quantity": 1})
+
+        # 2. Fetch Amazon Shipping Options and find PRIME_EXPRESS (₹99.00)
+        amz_ship_res = await ac.get("/api/v1/shipping-options?merchant_code=AMAZON")
+        assert amz_ship_res.status_code == 200
+        express_opt = next(o for o in amz_ship_res.json() if o["code"] == "PRIME_EXPRESS")
+        assert Decimal(express_opt["cost"]) == Decimal("99.00")
+
+        # 3. Prepare Checkout
+        prep_res = await ac.post("/api/v1/checkout/prepare", json={
+            "cart_id": cart_id,
+            "shipping_option_id": express_opt["id"]
+        })
+        assert prep_res.status_code == 201
+        chk = prep_res.json()
+
+        # 4. Verify exact arithmetic
+        subtotal = Decimal(chk["subtotal"])
+        discount = Decimal(chk["discount_total"])
+        shipping = Decimal(chk["shipping_total"])
+        tax = Decimal(chk["tax_total"])
+        grand_total = Decimal(chk["grand_total"])
+
+        assert subtotal == Decimal("109999.00")
+        assert shipping == Decimal("99.00")
+        assert tax == Decimal("19799.82")  # 18% of 109,999.00
+        assert grand_total == Decimal("129897.82")  # 109999.00 - 0.00 + 99.00 + 19799.82
+        assert grand_total == subtotal - discount + shipping + tax
+        assert chk["shipping_option"]["id"] == express_opt["id"]
+        assert chk["shipping_option"]["name"] == express_opt["name"]
+
+
+@pytest.mark.asyncio
+async def test_checkout_shipping_flipkart_superfast_accepted():
+    """Regression test: Flipkart cart + Flipkart SuperFast (₹79.00) produces shipping_total=79.00 and accurate totals."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        c_res = await ac.post("/api/v1/carts", json={"merchant_code": "FLIPKART"})
+        cart_id = c_res.json()["id"]
+        p_res = await ac.get("/api/v1/products?merchant_code=FLIPKART&category=headphones")
+        prod = p_res.json()["items"][0]
+        await ac.post(f"/api/v1/carts/{cart_id}/items", json={"product_id": prod["id"], "quantity": 1})
+
+        flp_ship_res = await ac.get("/api/v1/shipping-options?merchant_code=FLIPKART")
+        super_fast_opt = next(o for o in flp_ship_res.json() if o["code"] == "SUPER_FAST")
+        assert Decimal(super_fast_opt["cost"]) == Decimal("79.00")
+
+        prep_res = await ac.post("/api/v1/checkout/prepare", json={
+            "cart_id": cart_id,
+            "shipping_option_id": super_fast_opt["id"]
+        })
+        assert prep_res.status_code == 201
+        chk = prep_res.json()
+
+        subtotal = Decimal(chk["subtotal"])
+        discount = Decimal(chk["discount_total"])
+        shipping = Decimal(chk["shipping_total"])
+        tax = Decimal(chk["tax_total"])
+        grand_total = Decimal(chk["grand_total"])
+
+        assert shipping == Decimal("79.00")
+        assert grand_total == subtotal - discount + shipping + tax
+
+
+@pytest.mark.asyncio
+async def test_checkout_rejected_foreign_shipping_creates_no_session():
+    """Regression test: A rejected foreign shipping request MUST NOT persist any CheckoutSession in the database."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        c_res = await ac.post("/api/v1/carts", json={"merchant_code": "AMAZON"})
+        cart_id = c_res.json()["id"]
+        p_res = await ac.get("/api/v1/products?merchant_code=AMAZON&category=laptops")
+        prod = p_res.json()["items"][0]
+        await ac.post(f"/api/v1/carts/{cart_id}/items", json={"product_id": prod["id"], "quantity": 1})
+
+        flp_ship_res = await ac.get("/api/v1/shipping-options?merchant_code=FLIPKART")
+        flp_ship_id = flp_ship_res.json()[0]["id"]
+
+        for db in get_db_session():
+            initial_count = db.query(CheckoutSessionModel).filter(CheckoutSessionModel.cart_id == cart_id).count()
+            assert initial_count == 0
+            break
+
+        # Rejected call
+        bad_res = await ac.post("/api/v1/checkout/prepare", json={
+            "cart_id": cart_id,
+            "shipping_option_id": flp_ship_id
+        })
+        assert bad_res.status_code == 400
+
+        for db in get_db_session():
+            post_count = db.query(CheckoutSessionModel).filter(CheckoutSessionModel.cart_id == cart_id).count()
+            assert post_count == 0  # No session was created
+            break
 
 
 # =====================================================================
