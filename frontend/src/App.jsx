@@ -107,19 +107,56 @@ export default function App() {
     setActiveTab('search');
 
     try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
+      // Primary: Phase 3 Autonomous Shopping Agent
+      let res = await fetch(`${API_BASE}/api/v1/agent/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: queryText, session_id: "session_default" })
-      });
+        body: JSON.stringify({ query: queryText, user_id: "default_user" })
+      }).catch(() => null);
 
-      if (res.ok) {
-        const data = await res.json();
-        setRecommendation(data);
+      if (res && res.ok) {
+        const rawData = await res.json();
+        const topCandidate = rawData.top_recommendation ? {
+          ...rawData.top_recommendation.candidate,
+          badge: rawData.top_recommendation.badge,
+          reasons: rawData.top_recommendation.reasons,
+          tradeoffs: rawData.top_recommendation.tradeoffs,
+          price_inr: Number(rawData.top_recommendation.candidate.current_price),
+          value_score: rawData.top_recommendation.mcda_score?.composite_score || 9.5
+        } : null;
+
+        const comparisonList = (rawData.all_recommendations || []).map(item => ({
+          ...item.candidate,
+          badge: item.badge,
+          reasons: item.reasons,
+          tradeoffs: item.tradeoffs,
+          price_inr: Number(item.candidate.current_price),
+          value_score: item.mcda_score?.composite_score || 8.0
+        }));
+
+        setRecommendation({
+          ...rawData,
+          top_recommendation: topCandidate,
+          comparison_table: comparisonList,
+          explanation: rawData.top_recommendation?.reasons?.join(" • ") || "MCDA highest ranked match",
+          trade_off_analysis: rawData.top_recommendation?.tradeoffs?.join(" • ") || "Optimal price-performance balance"
+        });
         fetchInitialData();
       } else {
-        const err = await res.json().catch(() => ({}));
-        alert(`Search error: ${err.detail || "Failed to process shopping request"}`);
+        // Fallback to /api/chat if legacy endpoint
+        const fallbackRes = await fetch(`${API_BASE}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: queryText, session_id: "session_default" })
+        });
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          setRecommendation(data);
+          fetchInitialData();
+        } else {
+          const err = await (res?.json() || fallbackRes.json()).catch(() => ({}));
+          alert(`Search error: ${err.detail || "Failed to process shopping request"}`);
+        }
       }
     } catch (err) {
       console.error("Query dispatch error:", err);

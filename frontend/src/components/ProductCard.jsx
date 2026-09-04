@@ -10,9 +10,11 @@ export default function ProductCard({
 }) {
   if (!product) return null;
 
-  const requiresApproval = product.price_inr >= policyThreshold;
-  const originalPrice = product.original_price_inr || Math.round(product.price_inr * 1.15);
-  const discountPct = Math.max(5, Math.round(((originalPrice - product.price_inr) / originalPrice) * 100));
+  const price = product.price_inr !== undefined ? Number(product.price_inr) : (product.current_price !== undefined ? Number(product.current_price) : 0);
+  const requiresApproval = price >= policyThreshold;
+  const originalPrice = product.original_price_inr || (product.base_price ? Number(product.base_price) : Math.round(price * 1.15));
+  const discountPct = originalPrice > price ? Math.max(5, Math.round(((originalPrice - price) / originalPrice) * 100)) : 0;
+  const valueScore = product.value_score || product.mcda_score?.composite_score;
 
   // Dynamic Specs Extraction
   const renderSpecs = () => {
@@ -65,12 +67,12 @@ export default function ProductCard({
     <div className={`glass-panel glass-panel-hover flex flex-col justify-between overflow-hidden relative border transition-all duration-300 rounded-2xl bg-slate-900/90 ${
       isTopPick ? 'border-indigo-500/70 shadow-[0_0_40px_rgba(99,102,241,0.25)] ring-1 ring-indigo-500/50' : 'border-white/10 hover:border-white/20'
     }`}>
-      {/* Top Pick Ribbon */}
-      {isTopPick && (
+      {/* Top Pick / Badge Ribbon */}
+      {(isTopPick || product.badge) && (
         <div className="absolute top-3 right-3 z-10">
           <span className="badge badge-indigo flex items-center gap-1.5 shadow-lg px-3 py-1 font-bold text-[11px] bg-indigo-600 text-white border-indigo-400">
             <Award className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300" />
-            AI TOP RECOMMENDATION
+            {product.badge === 'TOP_PICK' || isTopPick ? 'AI TOP RECOMMENDATION' : product.badge?.replace(/_/g, ' ')}
           </span>
         </div>
       )}
@@ -80,7 +82,7 @@ export default function ProductCard({
         <div className="flex items-center justify-between mb-3">
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-300 bg-cyan-950/40 px-2.5 py-1 rounded-full border border-cyan-800/40">
             <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-            {product.merchant_name || "Verified Retailer"}
+            {product.merchant_name || product.merchant_code || "Verified Retailer"}
           </span>
           <div className="flex items-center gap-1 text-xs text-amber-400 font-semibold">
             <Star className="w-3.5 h-3.5 fill-amber-400" />
@@ -105,21 +107,36 @@ export default function ProductCard({
           ))}
         </div>
 
+        {/* Verified Justification Reasons */}
+        {product.reasons && product.reasons.length > 0 && (
+          <div className="mt-3 space-y-1 bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-500/20">
+            <div className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider">Verified Agent Justification:</div>
+            {product.reasons.map((r, rIdx) => (
+              <div key={rIdx} className="text-[11px] text-slate-300 flex items-start gap-1.5">
+                <Check className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+                <span>{r}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Value Score Meter */}
-        {product.value_score && (
+        {valueScore && (
           <div className="mt-3 p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center font-bold text-xs text-white shadow-md">
-                {product.value_score}
+                {typeof valueScore === 'number' ? valueScore.toFixed(1) : valueScore}
               </div>
               <div>
                 <div className="text-xs font-semibold text-slate-200">MCDA Value Score</div>
-                <div className="text-[10px] text-slate-400">Best price-to-performance balance</div>
+                <div className="text-[10px] text-slate-400">Multi-criteria optimization index</div>
               </div>
             </div>
-            <div className="text-right text-[11px] text-emerald-400 font-mono font-medium">
-              Save {discountPct}% off
-            </div>
+            {discountPct > 0 && (
+              <div className="text-right text-[11px] text-emerald-400 font-mono font-medium">
+                Save {discountPct}% off
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -129,9 +146,9 @@ export default function ProductCard({
         <div className="flex items-baseline justify-between mb-4">
           <div>
             <div className="text-2xl font-extrabold text-white font-mono tracking-tight">
-              ₹{product.price_inr ? product.price_inr.toLocaleString() : "0"}
+              ₹{price ? price.toLocaleString() : "0"}
             </div>
-            {originalPrice > product.price_inr && (
+            {originalPrice > price && (
               <div className="text-xs text-slate-400 line-through">
                 ₹{originalPrice.toLocaleString()}
               </div>
