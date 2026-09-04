@@ -12,6 +12,7 @@ Defines structured schemas for:
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional
+import uuid
 from pydantic import BaseModel, Field, ConfigDict
 
 from backend.domain.marketplace import AvailabilityState
@@ -253,6 +254,50 @@ class AgentPlan(BaseModel):
     steps: List[AgentPlanStep] = Field(default_factory=list)
 
 
+class AgentAction(str, Enum):
+    DISCOVER_PRODUCTS = "DISCOVER_PRODUCTS"
+    NORMALIZE_PRODUCTS = "NORMALIZE_PRODUCTS"
+    APPLY_CONSTRAINTS = "APPLY_CONSTRAINTS"
+    RANK_PRODUCTS = "RANK_PRODUCTS"
+    GENERATE_RECOMMENDATION = "GENERATE_RECOMMENDATION"
+    REQUEST_CLARIFICATION = "REQUEST_CLARIFICATION"
+    COMPLETE = "COMPLETE"
+    FAIL = "FAIL"
+
+
+PHASE_3_ALLOWED_ACTIONS = {
+    AgentAction.DISCOVER_PRODUCTS,
+    AgentAction.NORMALIZE_PRODUCTS,
+    AgentAction.APPLY_CONSTRAINTS,
+    AgentAction.RANK_PRODUCTS,
+    AgentAction.GENERATE_RECOMMENDATION,
+    AgentAction.REQUEST_CLARIFICATION,
+    AgentAction.COMPLETE,
+    AgentAction.FAIL
+}
+
+
+class PlanStep(BaseModel):
+    id: str
+    action: AgentAction
+    description: str
+    status: str = "PENDING"  # "PENDING", "RUNNING", "COMPLETED", "FAILED", "SKIPPED"
+    error: Optional[str] = None
+    execution_time_ms: int = 0
+
+
+class ExecutionPlan(BaseModel):
+    goal: str
+    total_steps: int
+    steps: List[PlanStep] = Field(default_factory=list)
+    status: str = "PLANNED"  # "PLANNED", "EXECUTING", "COMPLETED", "FAILED"
+
+    def validate_actions(self) -> None:
+        for s in self.steps:
+            if s.action not in PHASE_3_ALLOWED_ACTIONS:
+                raise ValueError(f"Unauthorized or unknown action: {s.action}")
+
+
 class AgentTraceStep(BaseModel):
     step_id: str
     title: str
@@ -261,6 +306,50 @@ class AgentTraceStep(BaseModel):
     summary: str
     details: Optional[Dict[str, Any]] = None
     execution_time_ms: int = 0
+
+
+class ShoppingAgentState(BaseModel):
+    session_id: str
+    user_message: str
+    user_id: str = "default_user"
+    shopping_intent: Optional[ShoppingIntent] = None
+    execution_plan: Optional[ExecutionPlan] = None
+    current_step_index: int = 0
+    status: str = "PENDING"  # "PENDING", "PLANNING", "DISCOVERING", "CLARIFICATION_REQUIRED", "COMPLETED", "FAILED"
+    discovered_products: List[NormalizedProductCandidate] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+    retry_count: int = 0
+    max_retries: int = 2
+    trace_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    trace_steps: List[AgentTraceStep] = Field(default_factory=list)
+    timestamps: Dict[str, str] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class AgentSessionRequest(BaseModel):
+    message: Optional[str] = Field(default=None, description="User shopping query")
+    query: Optional[str] = Field(default=None, description="Alias for message")
+    session_id: Optional[str] = None
+    user_id: str = "default_user"
+
+    def get_message_text(self) -> str:
+        text = self.message or self.query
+        if not text or not text.strip():
+            raise ValueError("Message or query must be provided and non-empty.")
+        return text.strip()
+
+
+class AgentSessionResponse(BaseModel):
+    session_id: str
+    status: str
+    intent: Optional[ShoppingIntent] = None
+    plan: Optional[ExecutionPlan] = None
+    discovered_count: int = 0
+    trace: List[AgentTraceStep] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+    latency_ms: int = 0
 
 
 class RecommendationResponse(BaseModel):

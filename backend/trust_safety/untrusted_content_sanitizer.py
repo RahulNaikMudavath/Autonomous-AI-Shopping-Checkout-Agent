@@ -38,9 +38,11 @@ class SanitizationResult(BaseModel):
 class UntrustedContentSanitizer:
     INJECTION_PATTERNS = [
         (r'(?i)\bsystem\s*message\s*:', "System Message Impersonation"),
+        (r'(?i)\bsystem\s*override\b', "System Override Directive"),
         (r'(?i)\bignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|user[\'’]?s?)\s+(?:instructions|rules|prompts|budget|policy|constraints)', "Instruction/Budget Override Directive"),
         (r'(?i)\bignore\s+(?:the\s+)?(?:user[\'’]?s?\s+)?budget\b', "Budget Override Injection"),
         (r'(?i)\bpurchase\s+immediately\b', "Forced Purchase Trigger"),
+        (r'(?i)\bauthorize\s+payment\b', "Unauthorized Payment Trigger"),
         (r'(?i)\bapprove\s+without\s+(?:pin|auth|confirmation|approval)\b', "Authorization Bypass Attempt"),
         (r'(?i)\bdisregard\s+(?:safety|spending|policy|limit)\b', "Safety Boundary Disregard"),
         (r'(?i)\bset\s+price\s+to\s+(?:0|zero|free)\b', "Zero-Price Cart Exploit"),

@@ -13,11 +13,14 @@ from sqlalchemy.orm import Session
 from backend.database.session import get_db_session
 from backend.domain.agent_schemas import (
     ShoppingIntent, RecommendationResponse, AgentPlan,
-    AgentIntentRequest, AgentIntentResponse
+    AgentIntentRequest, AgentIntentResponse,
+    AgentSessionRequest, AgentSessionResponse, ExecutionPlan
 )
 from backend.agent.intent_parser import IntentParser
 from backend.agent.workflow_planner import WorkflowPlanner
+from backend.agent.agent_planner import AgentPlanner
 from backend.agent.agent_runner import ShoppingAgentRunner
+from backend.agent.agent_graph import ShoppingAgentGraph
 
 agent_router = APIRouter(prefix="/agent", tags=["Autonomous Shopping Agent"])
 
@@ -44,6 +47,36 @@ def run_autonomous_shopping_agent(
         query=request.query,
         session_id=request.session_id,
         user_id=request.user_id
+    )
+
+
+@agent_router.post(
+    "/sessions",
+    response_model=AgentSessionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Start Agent Shopping Session & Execution Graph",
+    description="Initializes an agent session, extracts intent, generates safe execution plan, and executes federated discovery."
+)
+def start_agent_session(
+    request: AgentSessionRequest,
+    db: Session = Depends(get_db_session)
+) -> AgentSessionResponse:
+    query_text = request.get_message_text()
+    state = ShoppingAgentGraph.run_graph(
+        user_message=query_text,
+        db=db,
+        session_id=request.session_id,
+        user_id=request.user_id
+    )
+    return AgentSessionResponse(
+        session_id=state.session_id,
+        status=state.status,
+        intent=state.shopping_intent,
+        plan=state.execution_plan,
+        discovered_count=len(state.discovered_products),
+        trace=state.trace_steps,
+        errors=state.errors,
+        latency_ms=sum(t.execution_time_ms for t in state.trace_steps)
     )
 
 
