@@ -219,33 +219,63 @@ export default function App() {
     }
   };
 
-  // Cart Handlers
+  // Cart Handlers (Phase 4 Step 1: Recommendation Selection -> Authoritative Server Cart)
   const handleAddToCart = async (product) => {
+    if (!product) return;
     try {
-      const res = await fetch(`${API_BASE}/api/cart/items`, {
+      const productId = product.product_id || product.id;
+      const merchantCode = product.merchant_code || (product.merchant ? product.merchant.merchant_code : 'AMAZON');
+      const expectedPrice = product.current_price !== undefined ? product.current_price : (product.price_inr !== undefined ? product.price_inr : undefined);
+
+      const res = await fetch(`${API_BASE}/api/v1/carts/select`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product, quantity: 1 })
+        body: JSON.stringify({
+          product_id: productId,
+          merchant_code: merchantCode,
+          quantity: 1,
+          expected_price: expectedPrice,
+          session_id: activeSessionId || 'default_user_session'
+        })
       });
+
       if (res.ok) {
-        const updatedCart = await res.json();
+        const data = await res.json();
+        const updatedCart = data.cart || data;
         setCart(updatedCart);
-        triggerToast(`Added ${product.title.split('(')[0]} to Cart`);
+        if (data.price_changed) {
+          triggerToast(`⚠️ Price updated to ₹${Number(data.current_authoritative_price).toLocaleString()} — added to ${merchantCode} cart`);
+        } else {
+          triggerToast(`✅ Added ${product.title ? product.title.split('(')[0].trim() : 'Product'} to ${merchantCode} Cart`);
+        }
         setIsCartOpen(true);
+      } else {
+        const errData = await res.json().catch(() => ({ detail: 'Failed to add product to cart' }));
+        const errMsg = typeof errData.detail === 'string' ? errData.detail : (errData.message || 'Failed to add item to cart');
+        triggerToast(`❌ ${errMsg}`);
       }
     } catch (err) {
       console.error("Error adding to cart:", err);
+      triggerToast("❌ Network error connecting to cart service");
     }
   };
 
   const handleRemoveFromCart = async (productId) => {
     try {
-      const res = await fetch(`${API_BASE}/api/cart/items/${productId}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        const updatedCart = await res.json();
-        setCart(updatedCart);
+      if (cart && cart.id) {
+        const res = await fetch(`${API_BASE}/api/v1/carts/${cart.id}/items/${productId}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          const updatedCart = await res.json();
+          setCart(updatedCart);
+          return;
+        }
+      }
+      // Fallback
+      const res = await fetch(`${API_BASE}/api/cart/items/${productId}`, { method: 'DELETE' }).catch(() => null);
+      if (res && res.ok) {
+        setCart(await res.json());
       }
     } catch (err) {
       console.error(err);
@@ -254,8 +284,16 @@ export default function App() {
 
   const handleClearCart = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/cart`, { method: 'DELETE' });
-      if (res.ok) setCart(await res.json());
+      if (cart && cart.id) {
+        const res = await fetch(`${API_BASE}/api/v1/carts/${cart.id}`, { method: 'DELETE' });
+        if (res.ok) {
+          setCart(await res.json());
+          return;
+        }
+      }
+      // Fallback
+      const res = await fetch(`${API_BASE}/api/cart`, { method: 'DELETE' }).catch(() => null);
+      if (res && res.ok) setCart(await res.json());
     } catch (err) {
       console.error(err);
     }

@@ -8,12 +8,27 @@ from sqlalchemy.orm import Session
 
 from backend.database.session import get_db_session
 from backend.domain.marketplace import (
-    CartCreateRequest, CartDetail, CartItemCreate, CartItemUpdate
+    CartCreateRequest, CartDetail, CartItemCreate, CartItemUpdate,
+    RecommendationSelectionRequest, RecommendationSelectionResponse
 )
 from backend.services.cart_service import CartService
 from backend.core.errors import EntityNotFoundException
 
 carts_router = APIRouter(prefix="/carts", tags=["Shopping Carts"])
+
+
+@carts_router.post(
+    "/select",
+    response_model=RecommendationSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Select Recommended Product into Merchant Cart",
+    description="Validates a user-selected recommendation server-side against live catalog price, inventory, and merchant isolation, then mutates the appropriate merchant cart."
+)
+def select_recommendation_and_add_to_cart(
+    request: RecommendationSelectionRequest,
+    db: Session = Depends(get_db_session)
+) -> RecommendationSelectionResponse:
+    return CartService.select_recommendation_and_add_to_cart(db, request)
 
 
 @carts_router.post(

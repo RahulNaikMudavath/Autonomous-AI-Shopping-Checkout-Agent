@@ -287,6 +287,31 @@ class CartDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RecommendationSelectionRequest(BaseModel):
+    """
+    Explicit user selection contract to transfer a recommended product into an authoritative merchant cart.
+    Client-provided monetary or inventory fields are strictly omitted.
+    """
+    product_id: str = Field(..., description="Unique product ID or canonical identifier")
+    merchant_code: str = Field(..., description="Merchant identifier (e.g. AMAZON, FLIPKART, CROMA)")
+    quantity: int = Field(default=1, ge=1, le=100, description="Requested units to add")
+    session_id: Optional[str] = Field(default=None, description="Active shopping session ID")
+    cart_id: Optional[str] = Field(default=None, description="Optional existing merchant cart ID to reuse")
+    expected_price: Optional[Decimal] = Field(default=None, description="Informational price displayed at recommendation time for change detection")
+
+
+class RecommendationSelectionResponse(BaseModel):
+    """
+    Response returned upon server-side validation and cart mutation.
+    """
+    success: bool = Field(default=True, description="True if product was validated and added to cart")
+    cart: CartDetail = Field(..., description="Server-recalculated authoritative cart state")
+    price_changed: bool = Field(default=False, description="True if live catalog price differs from recommendation expected price")
+    original_expected_price: Optional[Decimal] = Field(default=None, description="Recommendation price before live validation")
+    current_authoritative_price: Decimal = Field(..., description="Live database catalog price applied to cart")
+    message: str = Field(default="Product successfully added to cart", description="User-facing summary message")
+
+
 # =====================================================================
 # Checkout Schemas
 # =====================================================================

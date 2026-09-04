@@ -8,7 +8,10 @@ from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 
 from backend.database.models import CartModel, CartItemModel, ProductModel, MerchantModel
-from backend.domain.marketplace import CartDetail, CartItemDetail, CartStatus
+from backend.domain.marketplace import (
+    CartDetail, CartItemDetail, CartStatus,
+    RecommendationSelectionRequest, RecommendationSelectionResponse
+)
 from backend.services.pricing_service import PricingService, quantize_money, ZERO
 from backend.services.inventory_service import InventoryService, OutOfStockException, InsufficientInventoryException
 from backend.core.errors import AgentCartException, EntityNotFoundException
@@ -249,4 +252,165 @@ class CartService:
             status=CartStatus(cart.status),
             created_at=cart.created_at.isoformat() if cart.created_at else None,
             updated_at=cart.updated_at.isoformat() if cart.updated_at else None
+        )
+
+    @classmethod
+    def select_recommendation_and_add_to_cart(
+        cls,
+        db: Session,
+        request: RecommendationSelectionRequest
+    ) -> RecommendationSelectionResponse:
+        """
+        Phase 4 Step 1: Explicit Recommendation Selection -> Server-Authoritative Cart Mutation.
+        Performs live database revalidation of:
+        1. Quantity bounds (1 <= qty <= 100)
+        2. Merchant existence & active status
+        3. Product existence & active status
+        4. Product merchant ownership matching
+        5. Live price re-fetching from catalog
+        6. Live inventory verification
+        7. Merchant isolation cart retrieval or creation
+        8. Recalculation of all subtotals, taxes, and grand totals
+        """
+        logger.info(
+            "Processing recommendation selection: product_id=%s, merchant_code=%s, qty=%d, session_id=%s",
+            request.product_id, request.merchant_code, request.quantity, request.session_id
+        )
+
+        # 1. Validate quantity
+        if request.quantity <= 0 or request.quantity > 100:
+            raise AgentCartException("Quantity must be between 1 and 100.", code="INVALID_QUANTITY", status_code=400)
+
+        # 2. Validate Merchant existence and active status
+        merchant = db.query(MerchantModel).filter(
+            (MerchantModel.id == request.merchant_code) |
+            (MerchantModel.merchant_code == request.merchant_code.strip().upper())
+        ).first()
+
+        if not merchant:
+            raise EntityNotFoundException("Merchant", request.merchant_code)
+
+        if not merchant.is_active:
+            raise AgentCartException(
+                f"Merchant '{merchant.merchant_code}' is currently inactive.",
+                code="MERCHANT_INACTIVE",
+                status_code=400
+            )
+
+        # 3. Validate Product existence and active status
+        product = db.query(ProductModel).options(
+            joinedload(ProductModel.merchant)
+        ).filter(
+            (ProductModel.id == request.product_id) | (ProductModel.sku == request.product_id)
+        ).first()
+
+        if not product:
+            raise EntityNotFoundException("Product", request.product_id)
+
+        if not product.is_active:
+            raise AgentCartException(
+                f"Product '{product.title}' (id={product.id}) is not active or available for sale.",
+                code="PRODUCT_INACTIVE",
+                status_code=400
+            )
+
+        # 4. Enforce strict merchant ownership match
+        if product.merchant_id != merchant.id:
+            raise AgentCartException(
+                f"Product '{product.title}' belongs to merchant '{product.merchant.merchant_code if product.merchant else product.merchant_id}', "
+                f"which does not match requested merchant '{merchant.merchant_code}'.",
+                code="MERCHANT_MISMATCH",
+                status_code=400
+            )
+
+        # 5. Live Price Validation
+        if product.current_price is None or product.current_price <= Decimal("0.00"):
+            raise AgentCartException(
+                f"Product '{product.title}' does not have a valid current price.",
+                code="INVALID_PRICE",
+                status_code=400
+            )
+
+        live_price = quantize_money(product.current_price)
+        price_changed = False
+        if request.expected_price is not None:
+            expected_quantized = quantize_money(request.expected_price)
+            if live_price != expected_quantized:
+                price_changed = True
+                logger.info(
+                    "Price change detected for product %s: expected=₹%s, live=₹%s",
+                    product.id, expected_quantized, live_price
+                )
+
+        # 6. Locate or Create Isolated Merchant Cart
+        cart = None
+        if request.cart_id:
+            cart = cls.get_cart(db, request.cart_id)
+            if not cart:
+                raise EntityNotFoundException("Cart", request.cart_id)
+            if cart.merchant_id != merchant.id:
+                raise AgentCartException(
+                    f"Cannot add product from merchant '{merchant.merchant_code}' into existing cart belonging to '{cart.merchant.merchant_code if cart.merchant else cart.merchant_id}'. "
+                    "Cross-merchant cart mutation is strictly prohibited.",
+                    code="MERCHANT_MISMATCH",
+                    status_code=400
+                )
+        else:
+            # Look for existing active cart for this session and merchant
+            if request.session_id:
+                cart = db.query(CartModel).options(
+                    joinedload(CartModel.merchant),
+                    joinedload(CartModel.items).joinedload(CartItemModel.product)
+                ).filter(
+                    CartModel.merchant_id == merchant.id,
+                    CartModel.session_id == request.session_id,
+                    CartModel.status == "ACTIVE"
+                ).first()
+
+            if not cart:
+                cart = cls.create_cart(db, merchant.merchant_code, request.session_id)
+
+        # 7. Live Inventory Verification
+        existing_item = next((it for it in cart.items if it.product_id == product.id), None)
+        target_qty = (existing_item.quantity + request.quantity) if existing_item else request.quantity
+
+        can_fulfill, avail_qty, state = InventoryService.check_availability(db, product.id, target_qty)
+        if not can_fulfill:
+            if avail_qty == 0:
+                raise OutOfStockException(product.id)
+            raise InsufficientInventoryException(product.id, target_qty, avail_qty)
+
+        # 8. Mutate Cart Items
+        if existing_item:
+            existing_item.quantity = target_qty
+            existing_item.unit_price = live_price
+            existing_item.total_price = PricingService.calculate_line_item_total(live_price, target_qty)
+        else:
+            new_item = CartItemModel(
+                cart_id=cart.id,
+                product_id=product.id,
+                quantity=request.quantity,
+                unit_price=live_price,
+                total_price=PricingService.calculate_line_item_total(live_price, request.quantity)
+            )
+            db.add(new_item)
+            cart.items.append(new_item)
+
+        # 9. Authoritative Server Recalculation
+        cls.recalculate_cart(db, cart)
+        db.commit()
+        db.refresh(cart)
+
+        cart_dto = cls.to_dto(cart)
+        msg = f"Added {request.quantity} unit(s) of '{product.title}' to {merchant.merchant_code} cart."
+        if price_changed:
+            msg += f" Note: Price updated to ₹{live_price:,.2f} (previously displayed as ₹{request.expected_price:,.2f})."
+
+        return RecommendationSelectionResponse(
+            success=True,
+            cart=cart_dto,
+            price_changed=price_changed,
+            original_expected_price=request.expected_price,
+            current_authoritative_price=live_price,
+            message=msg
         )

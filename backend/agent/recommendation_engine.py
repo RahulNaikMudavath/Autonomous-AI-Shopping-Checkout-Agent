@@ -64,8 +64,7 @@ class RecommendationEngine:
         # 3. Handle zero matches
         if not ranking_result or not ranking_result.ranked_products:
             warnings.append("NO_PRODUCTS_MATCHED: No products satisfied all required hard constraints.")
-            if not discovery_result or discovery_result.total_results == 0:
-                data_completeness = "EMPTY"
+            data_completeness = "EMPTY"
 
             return RecommendationResult(
                 best_overall=None,
