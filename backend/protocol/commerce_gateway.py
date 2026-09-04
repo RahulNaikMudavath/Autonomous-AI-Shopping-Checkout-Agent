@@ -371,3 +371,19 @@ class CommerceGateway:
             estimated_delivery="Cancelled / Refund Initiated",
             transport_used=resolved_transport
         )
+
+    # -------------------------------------------------------------
+    # Phase 2 Merchant Adapter Resolution
+    # -------------------------------------------------------------
+    @staticmethod
+    def get_adapter(merchant_code_or_id: str):
+        """Resolves Phase 2 merchant adapter (Amazon, Flipkart, Croma)."""
+        from backend.services.merchant_adapters import get_merchant_adapter
+        return get_merchant_adapter(merchant_code_or_id)
+
+    @staticmethod
+    def list_adapters():
+        """Lists active primary Phase 2 merchant adapters."""
+        from backend.services.merchant_adapters import list_merchant_adapters
+        return list_merchant_adapters()
+
