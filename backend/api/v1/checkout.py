@@ -3,7 +3,7 @@ Phase 2 & Phase 4: Checkout Preparation API Endpoints
 Provides authoritative pre-order revalidation, promotional code evaluation, and CheckoutSession / Quote creation.
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy.orm import Session
 
 from backend.database.session import get_db_session
@@ -30,22 +30,34 @@ checkout_router = APIRouter(tags=["Checkout & Shipping"])
 )
 def prepare_checkout(
     request: CheckoutPrepareRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    x_session_id: Optional[str] = Header(None, alias="X-Session-ID"),
     db: Session = Depends(get_db_session)
 ) -> CheckoutSummaryResponse:
-    return CheckoutService.prepare_checkout(db, request)
+    return CheckoutService.prepare_checkout(
+        db=db,
+        request=request,
+        idempotency_key=idempotency_key,
+        caller_session_id=x_session_id or request.session_id
+    )
 
 
 @checkout_router.get(
     "/checkout/{checkout_session_id}",
     response_model=CheckoutSummaryResponse,
     summary="Get Checkout Session / Quote",
-    description="Retrieves an active or completed CheckoutSession summary with live staleness and expiration checks."
+    description="Retrieves an active or completed CheckoutSession summary with live staleness, horizontal access, and expiration checks."
 )
 def get_checkout_session(
     checkout_session_id: str,
+    x_session_id: Optional[str] = Header(None, alias="X-Session-ID"),
     db: Session = Depends(get_db_session)
 ) -> CheckoutSummaryResponse:
-    summary = CheckoutService.get_checkout_session(db, checkout_session_id)
+    summary = CheckoutService.get_checkout_session(
+        db=db,
+        session_id=checkout_session_id,
+        caller_session_id=x_session_id
+    )
     if not summary:
         raise EntityNotFoundException("CheckoutSession", checkout_session_id)
     return summary
@@ -55,14 +67,22 @@ def get_checkout_session(
     "/checkout/{checkout_session_id}/transition",
     response_model=CheckoutTransitionResponse,
     summary="Execute Checkout State Machine Transition",
-    description="Executes a deterministic, server-authoritative state transition on the checkout session after enforcing preconditions and live invariant checks."
+    description="Executes a deterministic, server-authoritative state transition on the checkout session after enforcing preconditions, resource bindings, horizontal access, and durable idempotency."
 )
 def transition_checkout_session(
     checkout_session_id: str,
     request: CheckoutTransitionRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    x_session_id: Optional[str] = Header(None, alias="X-Session-ID"),
     db: Session = Depends(get_db_session)
 ) -> CheckoutTransitionResponse:
-    return CheckoutStateMachine.transition(db, checkout_session_id, request)
+    return CheckoutStateMachine.transition(
+        db=db,
+        checkout_session_id=checkout_session_id,
+        request=request,
+        idempotency_key=idempotency_key,
+        caller_session_id=x_session_id
+    )
 
 
 @checkout_router.get(

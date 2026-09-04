@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import uuid
 from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, JSON, ForeignKey, Text, Index, Numeric
+    Column, String, Integer, Float, Boolean, DateTime, JSON, ForeignKey, Text, Index, Numeric, UniqueConstraint
 )
 from sqlalchemy.orm import declarative_base, relationship
 from decimal import Decimal
@@ -542,9 +542,15 @@ class CheckoutSessionModel(Base):
     shipping_option_id = Column(String(64), nullable=True)
     promo_code = Column(String(64), nullable=True)
     items_snapshot = Column(JSON, default=list)
-    status = Column(String(32), default="PENDING", nullable=False, index=True)  # "PENDING", "COMPLETED", "EXPIRED", "CANCELLED"
+    status = Column(String(32), default="PENDING", nullable=False, index=True)  # "PENDING", "COMPLETED", "EXPIRED", "CANCELLED", etc.
+    version = Column(Integer, default=1, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    # Relationships
+    cart = relationship("CartModel", foreign_keys=[cart_id])
+    merchant = relationship("MerchantModel", foreign_keys=[merchant_id])
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -562,8 +568,50 @@ class CheckoutSessionModel(Base):
             "promo_code": self.promo_code,
             "items_snapshot": self.items_snapshot or [],
             "status": self.status,
+            "version": self.version,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class CheckoutIdempotencyRecordModel(Base):
+    """
+    Durable PostgreSQL storage for server-authoritative checkout idempotency.
+    Guarantees that replayed requests with identical keys return cached authoritative responses
+    without duplicate transitions, double charges, or race conditions.
+    """
+    __tablename__ = "checkout_idempotency_records"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
+    idempotency_key = Column(String(128), nullable=False, index=True)
+    operation = Column(String(64), nullable=False, index=True)  # e.g. "prepare_checkout", "checkout_transition"
+    resource_id = Column(String(64), nullable=True, index=True)  # e.g. cart_id or checkout_session_id
+    session_id = Column(String(64), nullable=True, index=True)  # user/client session for horizontal access control
+    request_hash = Column(String(64), nullable=False)  # SHA-256 fingerprint of normalized request payload
+    status = Column(String(32), default="COMPLETED", nullable=False)  # "PROCESSING", "COMPLETED", "FAILED"
+    response_code = Column(Integer, default=200, nullable=False)
+    response_body = Column(JSON, nullable=True)  # JSON serialized response
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", "operation", name="uq_idempotency_key_operation"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "idempotency_key": self.idempotency_key,
+            "operation": self.operation,
+            "resource_id": self.resource_id,
+            "session_id": self.session_id,
+            "request_hash": self.request_hash,
+            "status": self.status,
+            "response_code": self.response_code,
+            "response_body": self.response_body,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None
         }
 
 

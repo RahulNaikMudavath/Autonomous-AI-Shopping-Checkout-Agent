@@ -73,6 +73,21 @@ def init_db(engine: Engine | None = None) -> Engine:
     )
     
     Base.metadata.create_all(bind=target_engine)
+    try:
+        with target_engine.begin() as conn:
+            if target_engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1;"))
+                conn.execute(text("ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();"))
+            elif target_engine.dialect.name == "sqlite":
+                res = conn.execute(text("PRAGMA table_info(checkout_sessions)")).fetchall()
+                col_names = [r[1] for r in res]
+                if "version" not in col_names and len(col_names) > 0:
+                    conn.execute(text("ALTER TABLE checkout_sessions ADD COLUMN version INTEGER DEFAULT 1;"))
+                if "updated_at" not in col_names and len(col_names) > 0:
+                    conn.execute(text("ALTER TABLE checkout_sessions ADD COLUMN updated_at DATETIME;"))
+    except Exception as e:
+        logger.warning("Database schema column migration check: %s", str(e))
+        
     logger.info("AgentCart database tables verified/created successfully.")
     return target_engine
 

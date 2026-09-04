@@ -18,6 +18,7 @@ from backend.domain.marketplace import (
 )
 from backend.services.inventory_service import InventoryService, OutOfStockException, InsufficientInventoryException
 from backend.services.pricing_service import quantize_money, ZERO
+from backend.services.checkout_security_service import CheckoutSecurityService
 from backend.core.errors import AgentCartException, EntityNotFoundException
 
 logger = logging.getLogger("agentcart.checkout.statemachine")
@@ -124,12 +125,14 @@ class CheckoutStateMachine:
         cls,
         db: Session,
         checkout_session_id: str,
-        request: CheckoutTransitionRequest
+        request: CheckoutTransitionRequest,
+        idempotency_key: Optional[str] = None,
+        caller_session_id: Optional[str] = None
     ) -> CheckoutTransitionResponse:
         """
         Executes a deterministic state transition on the checkout session.
-        Validates state machine rules, runs live precondition revalidation, handles concurrency,
-        ensures idempotency, and records audit telemetry.
+        Validates state machine rules, horizontal access, resource bindings, runs live precondition revalidation,
+        handles concurrency via row-level locks, ensures idempotency, and records audit telemetry.
         """
         action_val = request.action.value if hasattr(request.action, "value") else str(request.action)
 
@@ -141,10 +144,35 @@ class CheckoutStateMachine:
         if not session:
             raise EntityNotFoundException("CheckoutSession", checkout_session_id)
 
+        # 2. Horizontal Access Control & Session Ownership Verification
+        CheckoutSecurityService.validate_horizontal_access(session, caller_session_id)
+
+        # 3. Cryptographic & Resource Binding Verification (Quote, Cart, Merchant)
+        CheckoutSecurityService.validate_quote_bindings(
+            session=session,
+            quote_id=request.quote_id,
+            cart_id=request.cart_id,
+            merchant_code=request.merchant_code
+        )
+
+        effective_session_id = caller_session_id or session.session_id
+
+        # 4. Durable PostgreSQL Idempotency Gate
+        if idempotency_key:
+            record, is_hit = CheckoutSecurityService.check_idempotency(
+                db=db,
+                idempotency_key=idempotency_key,
+                operation=f"checkout_transition:{action_val}",
+                payload=request,
+                session_id=effective_session_id
+            )
+            if is_hit and record and record.response_body:
+                return CheckoutTransitionResponse(**record.response_body)
+
         current_state = session.status
         now = datetime.now(timezone.utc)
 
-        # 2. Check for quote expiration first if session is in an active state
+        # 5. Check for quote expiration first if session is in an active state
         if current_state not in cls.TERMINAL_STATES:
             if session.expires_at and now > session.expires_at:
                 session.status = CheckoutSessionStatus.EXPIRED.value
@@ -156,7 +184,7 @@ class CheckoutStateMachine:
                     details={"checkout_session_id": session.id, "expires_at": session.expires_at.isoformat()}
                 )
 
-        # 3. Check allowed actions from current state
+        # 6. Check allowed actions from current state
         allowed_actions = cls.TRANSITION_TABLE.get(current_state, {})
         if action_val not in allowed_actions:
             if current_state in cls.TERMINAL_STATES:
@@ -173,11 +201,11 @@ class CheckoutStateMachine:
 
         target_state = allowed_actions[action_val]
 
-        # 4. Idempotency Check: if session is already in target_state, return gracefully without double side-effects
+        # 7. Idempotency Check: if session is already in target_state, return gracefully without double side-effects
         if current_state == target_state:
             logger.info("Idempotent transition request for session %s: already in %s", session.id, target_state)
             summary = cls._build_summary(db, session)
-            return CheckoutTransitionResponse(
+            resp = CheckoutTransitionResponse(
                 success=True,
                 message=f"Checkout session is already in state '{target_state}' (idempotent request).",
                 checkout_session_id=session.id,
@@ -194,8 +222,20 @@ class CheckoutStateMachine:
                     success=True
                 )
             )
+            if idempotency_key:
+                CheckoutSecurityService.record_idempotency_success(
+                    db=db,
+                    idempotency_key=idempotency_key,
+                    operation=f"checkout_transition:{action_val}",
+                    resource_id=session.id,
+                    session_id=effective_session_id,
+                    payload=request,
+                    response_body=resp,
+                    response_code=200
+                )
+            return resp
 
-        # 5. Pre-Transition Live Revalidation (for forward progression actions)
+        # 8. Pre-Transition Live Invariant Revalidation (for forward progression actions)
         if action_val in {
             CheckoutTransitionAction.VALIDATE_QUOTE.value,
             CheckoutTransitionAction.REQUEST_AUTHORIZATION.value,
@@ -206,30 +246,17 @@ class CheckoutStateMachine:
         }:
             cls._validate_preconditions(db, session)
 
-        # 6. Apply State Transition
+        # 9. Apply State Transition & Monotonically Increment Version
         session.status = target_state
-
-        # 7. Record State Transition Audit History in items_snapshot / metadata
-        history_entry = {
-            "from_state": current_state,
-            "to_state": target_state,
-            "action": action_val,
-            "reason": request.reason,
-            "timestamp": now.isoformat(),
-            "metadata": request.metadata or {}
-        }
-        
-        # Preserve audit history within session snapshot or metadata structure
-        if not hasattr(session, "state_history") or session.state_history is None:
-            # Stored in session's internal JSON structure safely
-            pass
+        session.version = (session.version or 1) + 1
+        session.updated_at = now
 
         db.commit()
         db.refresh(session)
 
         logger.info(
-            "Executed checkout state transition: session=%s, action=%s, %s -> %s",
-            session.id, action_val, current_state, target_state
+            "Executed checkout state transition: session=%s, action=%s, %s -> %s (version=%s)",
+            session.id, action_val, current_state, target_state, session.version
         )
 
         summary = cls._build_summary(db, session)
@@ -243,7 +270,7 @@ class CheckoutStateMachine:
             success=True
         )
 
-        return CheckoutTransitionResponse(
+        transition_response = CheckoutTransitionResponse(
             success=True,
             message=f"Checkout session successfully transitioned from '{current_state}' to '{target_state}'.",
             checkout_session_id=session.id,
@@ -253,6 +280,21 @@ class CheckoutStateMachine:
             checkout=summary,
             audit_log=audit_log
         )
+
+        # 10. Persist Durable Idempotency Record
+        if idempotency_key:
+            CheckoutSecurityService.record_idempotency_success(
+                db=db,
+                idempotency_key=idempotency_key,
+                operation=f"checkout_transition:{action_val}",
+                resource_id=session.id,
+                session_id=effective_session_id,
+                payload=request,
+                response_body=transition_response,
+                response_code=200
+            )
+
+        return transition_response
 
     @classmethod
     def _validate_preconditions(cls, db: Session, session: CheckoutSessionModel) -> None:

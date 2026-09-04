@@ -368,6 +368,7 @@ class CheckoutSummaryResponse(BaseModel):
     is_stale: bool = False
     warnings: List[str] = Field(default_factory=list)
     state_history: List[Dict[str, Any]] = Field(default_factory=list)
+    version: int = 1
     expires_at: str
     created_at: str
 
@@ -389,6 +390,9 @@ class CheckoutTransitionRequest(BaseModel):
     action: CheckoutTransitionAction = Field(..., description="Semantic action to execute on checkout session")
     reason: Optional[str] = Field(default=None, description="Optional explanation or context for transition")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context metadata")
+    quote_id: Optional[str] = Field(default=None, description="Optional quote ID to verify binding")
+    cart_id: Optional[str] = Field(default=None, description="Optional cart ID to verify binding")
+    merchant_code: Optional[str] = Field(default=None, description="Optional merchant code to verify binding")
 
     model_config = ConfigDict(extra="forbid")
 

@@ -21,6 +21,7 @@ from backend.domain.marketplace import (
 from backend.services.pricing_service import PricingService, quantize_money, ZERO
 from backend.services.inventory_service import InventoryService, OutOfStockException, InsufficientInventoryException
 from backend.services.shipping_service import ShippingService
+from backend.services.checkout_security_service import CheckoutSecurityService
 from backend.core.errors import AgentCartException, EntityNotFoundException
 
 logger = logging.getLogger("agentcart.checkout")
@@ -48,21 +49,38 @@ class CheckoutService:
     def prepare_checkout(
         cls,
         db: Session,
-        request: CheckoutPrepareRequest
+        request: CheckoutPrepareRequest,
+        idempotency_key: Optional[str] = None,
+        caller_session_id: Optional[str] = None
     ) -> CheckoutSummaryResponse:
         """
-        Executes the deterministic 9-step checkout quote preparation workflow:
-        1. Retrieve cart, verify active status, and verify non-empty.
-        2. Validate merchant existence and active status.
-        3. Validate every product is active and belongs to the cart merchant.
-        4. Re-check live inventory availability for all items (zero inventory decrement).
-        5. Revalidate live product catalog prices (detect price changes without trusting stored price).
-        6. Authoritatively evaluate promotional discounts.
-        7. Authoritatively validate shipping option with strict merchant isolation (reject cross-merchant shipping).
-        8. Compute applicable taxes (18% GST) and grand total with Decimal precision.
-        9. Persist CheckoutSession quote record with bounded 15-minute TTL.
+        Executes the deterministic 9-step checkout quote preparation workflow with idempotency and security gates:
+        1. Check idempotency record in PostgreSQL.
+        2. Retrieve cart, verify active status, non-empty, and validate horizontal ownership.
+        3. Validate merchant existence and active status.
+        4. Validate every product is active and belongs to the cart merchant.
+        5. Re-check live inventory availability for all items (zero inventory decrement).
+        6. Revalidate live product catalog prices (detect price changes without trusting stored price).
+        7. Authoritatively evaluate promotional discounts.
+        8. Authoritatively validate shipping option with strict merchant isolation (reject cross-merchant shipping).
+        9. Compute applicable taxes (18% GST) and grand total with Decimal precision.
+        10. Persist CheckoutSession quote record with bounded 15-minute TTL and durable idempotency record.
         """
-        # 1. Cart Verification
+        effective_session_id = caller_session_id or request.session_id
+
+        # 0. Idempotency Gate
+        if idempotency_key:
+            record, is_hit = CheckoutSecurityService.check_idempotency(
+                db=db,
+                idempotency_key=idempotency_key,
+                operation="prepare_checkout",
+                payload=request,
+                session_id=effective_session_id
+            )
+            if is_hit and record and record.response_body:
+                return CheckoutSummaryResponse(**record.response_body)
+
+        # 1. Cart Verification & Horizontal Access Control
         cart = db.query(CartModel).options(
             joinedload(CartModel.merchant),
             joinedload(CartModel.items).joinedload(CartItemModel.product)
@@ -72,6 +90,9 @@ class CheckoutService:
 
         if not cart:
             raise EntityNotFoundException("Cart", request.cart_id)
+
+        # Enforce horizontal tenant/session access control
+        CheckoutSecurityService.validate_cart_ownership(cart, effective_session_id)
 
         if cart.status != "ACTIVE":
             raise AgentCartException(
@@ -274,7 +295,7 @@ class CheckoutService:
             checkout_session.id, merchant.merchant_code, subtotal, discount_amount, shipping_cost, tax_amount, grand_total
         )
 
-        return CheckoutSummaryResponse(
+        summary_res = CheckoutSummaryResponse(
             checkout_session_id=checkout_session.id,
             quote_id=checkout_session.id,
             cart_id=cart.id,
@@ -293,18 +314,42 @@ class CheckoutService:
             price_changed=price_changed,
             is_stale=False,
             warnings=warnings,
+            version=getattr(checkout_session, "version", 1),
             expires_at=expires_at.isoformat(),
             created_at=now.isoformat()
         )
 
+        # Record durable idempotency state in PostgreSQL
+        if idempotency_key:
+            CheckoutSecurityService.record_idempotency_success(
+                db=db,
+                idempotency_key=idempotency_key,
+                operation="prepare_checkout",
+                resource_id=cart.id,
+                session_id=effective_session_id,
+                payload=request,
+                response_body=summary_res,
+                response_code=201
+            )
+
+        return summary_res
+
     @classmethod
-    def get_checkout_session(cls, db: Session, session_id: str) -> Optional[CheckoutSummaryResponse]:
+    def get_checkout_session(
+        cls,
+        db: Session,
+        session_id: str,
+        caller_session_id: Optional[str] = None
+    ) -> Optional[CheckoutSummaryResponse]:
         """
-        Retrieves checkout session by ID with authoritative staleness and expiration verification.
+        Retrieves checkout session by ID with authoritative staleness, horizontal ownership, and expiration verification.
         """
         session = db.query(CheckoutSessionModel).filter(CheckoutSessionModel.id == session_id).first()
         if not session:
             return None
+
+        # Horizontal Access Control Verification
+        CheckoutSecurityService.validate_horizontal_access(session, caller_session_id)
 
         merchant = db.query(MerchantModel).filter(MerchantModel.id == session.merchant_id).first()
         shipping_opt = None
@@ -375,6 +420,7 @@ class CheckoutService:
             price_changed=False,
             is_stale=is_stale,
             warnings=warnings,
+            version=getattr(session, "version", 1),
             expires_at=session.expires_at.isoformat() if session.expires_at else now.isoformat(),
             created_at=session.created_at.isoformat() if session.created_at else now.isoformat()
         )

@@ -345,11 +345,18 @@ export default function App() {
     }
     setIsQuoteLoading(true);
     try {
+      const idempotencyKey = `quote_${cart.id}_${Date.now()}`;
+      const sessionId = activeSessionId || 'default_user_session';
       const res = await fetch(`${API_BASE}/api/v1/checkout/prepare`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+          'X-Session-ID': sessionId
+        },
         body: JSON.stringify({
-          cart_id: cart.id
+          cart_id: cart.id,
+          session_id: sessionId
         })
       });
       if (res.ok) {
@@ -379,9 +386,15 @@ export default function App() {
     setIsQuoteLoading(true);
     try {
       const sessionId = checkoutQuote.checkout_session_id;
+      const callerSession = activeSessionId || 'default_user_session';
+      const idempotencyKey = `trans_${sessionId}_${action}_${Date.now()}`;
       const res = await fetch(`${API_BASE}/api/v1/checkout/${sessionId}/transition`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+          'X-Session-ID': callerSession
+        },
         body: JSON.stringify({ action, reason })
       });
       if (res.ok) {
@@ -393,7 +406,9 @@ export default function App() {
         const msg = err.error?.message || err.detail || 'State transition failed';
         triggerToast(`❌ ${msg}`);
         // Refresh quote to reflect actual state (e.g. EXPIRED or INVALID)
-        const refreshRes = await fetch(`${API_BASE}/api/v1/checkout/${sessionId}`).catch(() => null);
+        const refreshRes = await fetch(`${API_BASE}/api/v1/checkout/${sessionId}`, {
+          headers: { 'X-Session-ID': callerSession }
+        }).catch(() => null);
         if (refreshRes && refreshRes.ok) {
           setCheckoutQuote(await refreshRes.json());
         }
