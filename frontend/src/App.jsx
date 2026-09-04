@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   Bot, ShoppingBag, Shield, Network, Package, Sparkles, Sliders, 
-  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity, FlaskConical, Building2, Settings, ChevronDown, Layers 
+  ExternalLink, CheckCircle, Zap, RefreshCw, AlertTriangle, Brain, Puzzle, Store, Cable, CreditCard, ShieldAlert, KeyRound, RotateCcw, Database, Activity, FlaskConical, Building2, Settings, ChevronDown, Layers, ArrowLeft, Laptop, Headphones, Smartphone, Monitor 
 } from 'lucide-react';
 
 import ChatInterface from './components/ChatInterface';
@@ -30,8 +30,35 @@ import ApiSettingsModal from './components/ApiSettingsModal';
 
 const API_BASE = 'http://localhost:8000';
 
+const FEATURED_CATEGORIES = [
+  { 
+    title: "AI & ML Dev Laptops", 
+    desc: "32GB+ RAM, NVIDIA RTX GPUs, High thermal headroom", 
+    icon: <Laptop className="w-5 h-5 text-indigo-400" />,
+    query: "I need a laptop for AI/ML development under ₹1.2 lakh with 32GB RAM and RTX GPU."
+  },
+  { 
+    title: "ANC Headphones", 
+    desc: "Sony WH-1000XM5, Bose, 30+ hour battery life", 
+    icon: <Headphones className="w-5 h-5 text-cyan-400" />,
+    query: "Find the best noise cancelling headphones under ₹30,000 with 30+ hour battery life."
+  },
+  { 
+    title: "Flagship 5G Phones", 
+    desc: "12GB RAM, Top tier cameras, Snapdragon 8 Gen 3", 
+    icon: <Smartphone className="w-5 h-5 text-purple-400" />,
+    query: "I need a flagship 5G smartphone with top tier camera and 12GB RAM under ₹1.2 lakh."
+  },
+  { 
+    title: "4K 144Hz Monitors", 
+    desc: "IPS panels, 1ms response time, HDR 600+", 
+    icon: <Monitor className="w-5 h-5 text-emerald-400" />,
+    query: "Find me a 4K 144Hz IPS gaming monitor with 1ms response time under ₹50,000."
+  }
+];
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'security' | 'permissions' | 'resiliency' | 'memory' | 'observability' | 'benchmark' | 'architecture' | 'safety' | 'protocols' | 'orders'
+  const [activeTab, setActiveTab] = useState('shopping'); // 'shopping' | 'orders' | 'safety' | 'brain' | 'specialized' | 'merchants' | 'gateway' | 'payments' | 'security' | 'permissions' | 'resiliency' | 'memory' | 'observability' | 'benchmark' | 'architecture' | 'protocols'
   
   // Data State
   const [recommendation, setRecommendation] = useState(null);
@@ -77,11 +104,6 @@ export default function App() {
       // 5. Fetch Brain State
       const brainRes = await fetch(`${API_BASE}/api/agent-brain/state`);
       if (brainRes.ok) setBrainState(await brainRes.json());
-
-      // Run default query if no recommendation yet
-      if (!recommendation) {
-        handleSearchQuery("I need a laptop for AI/ML development under ₹1.2 lakh. 32GB RAM minimum. NVIDIA GPU. 1TB SSD. Prefer good battery life. Find the best value.");
-      }
     } catch (err) {
       console.error("Error fetching initial state:", err);
     }
@@ -98,42 +120,47 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setRecommendation(data);
-        
-        // Refresh brain state
-        const brainRes = await fetch(`${API_BASE}/api/agent-brain/state`);
-        if (brainRes.ok) setBrainState(await brainRes.json());
+        // Refresh brain & audit
+        fetchInitialData();
+      } else {
+        const err = await res.json();
+        alert(`Search error: ${err.detail || "Failed to process shopping request"}`);
       }
     } catch (err) {
-      console.error("Search query error:", err);
+      console.error("Query dispatch error:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Cart Handlers
   const handleAddToCart = async (product) => {
     try {
-      const res = await fetch(`${API_BASE}/api/cart/add`, {
+      const res = await fetch(`${API_BASE}/api/cart/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, quantity: 1 })
+        body: JSON.stringify({ product, quantity: 1 })
       });
       if (res.ok) {
         const updatedCart = await res.json();
         setCart(updatedCart);
+        triggerToast(`Added ${product.title.split('(')[0]} to Cart`);
         setIsCartOpen(true);
-        triggerToast(`Added ${product.title} to cart`);
       }
     } catch (err) {
-      console.error("Add to cart error:", err);
+      console.error("Error adding to cart:", err);
     }
   };
 
   const handleRemoveFromCart = async (productId) => {
     try {
-      const res = await fetch(`${API_BASE}/api/cart/item/${productId}`, {
+      const res = await fetch(`${API_BASE}/api/cart/items/${productId}`, {
         method: 'DELETE'
       });
-      if (res.ok) setCart(await res.json());
+      if (res.ok) {
+        const updatedCart = await res.json();
+        setCart(updatedCart);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -161,7 +188,7 @@ export default function App() {
     }
   };
 
-  const handleApproveHitl = async (product, pin) => {
+  const handleApproveHitl = async (product) => {
     await executeDirectCheckout(product, true);
     setIsHitlModalOpen(false);
   };
@@ -183,9 +210,8 @@ export default function App() {
         const newOrder = await res.json();
         setOrders(prev => [newOrder, ...prev]);
         
-        // Refresh audit logs
-        const auditRes = await fetch(`${API_BASE}/api/audit-ledger`);
-        if (auditRes.ok) setAuditLedger(await auditRes.json());
+        // Refresh audit logs & cart
+        fetchInitialData();
 
         // Confetti celebration
         confetti({
@@ -217,10 +243,8 @@ export default function App() {
       if (res.ok) {
         const updated = await res.json();
         setPolicy(updated);
-        triggerToast("Spending policy & safety boundaries updated");
-        // Refresh audit
-        const auditRes = await fetch(`${API_BASE}/api/audit-ledger`);
-        if (auditRes.ok) setAuditLedger(await auditRes.json());
+        triggerToast("Spending policy updated successfully");
+        fetchInitialData();
       }
     } catch (err) {
       console.error(err);
@@ -238,9 +262,7 @@ export default function App() {
         const updated = await res.json();
         setOrders(prev => prev.map(o => o.order_id === orderId ? updated : o));
         triggerToast(`Return request initiated for ${orderId}`);
-        // Refresh audit
-        const auditRes = await fetch(`${API_BASE}/api/audit-ledger`);
-        if (auditRes.ok) setAuditLedger(await auditRes.json());
+        fetchInitialData();
       }
     } catch (err) {
       console.error(err);
@@ -261,18 +283,20 @@ export default function App() {
     setTimeout(() => setSuccessToast(null), 4000);
   };
 
+  const isDevTab = activeTab !== 'shopping' && activeTab !== 'orders' && activeTab !== 'safety';
+
   return (
-    <div className="min-h-screen flex flex-col text-slate-100 pb-16">
+    <div className="min-h-screen flex flex-col text-slate-100 pb-16 bg-[#090d16]">
       {/* Toast Notification */}
       {successToast && (
-        <div className="fixed top-5 right-5 z-50 bg-indigo-600 text-white px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-5 right-5 z-50 bg-indigo-600 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300">
           <CheckCircle className="w-4 h-4 text-emerald-300" />
           <span>{successToast}</span>
         </div>
       )}
 
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 glass-panel border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
+      {/* Top Navigation Bar: Minimal & Uncluttered */}
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/85 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand Logo */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('shopping')}>
@@ -281,18 +305,21 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-lg font-extrabold tracking-tight brand-font gradient-title">
+                <span className="text-lg font-extrabold tracking-tight brand-font bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
                   AgentCart
                 </span>
-                <span className="badge badge-indigo text-[10px] py-0 px-2">AI Commerce</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Live Commerce
+                </span>
               </div>
               <div className="text-[10px] text-slate-400 font-mono hidden sm:block">
-                Autonomous Shopping &amp; Checkout
+                Autonomous AI Shopping &amp; Checkout
               </div>
             </div>
           </div>
 
-          {/* Center Navigation: Clean & Essential */}
+          {/* Center Navigation: Essential Consumer Tabs */}
           <nav className="flex items-center gap-1.5 bg-white/[0.03] p-1 rounded-xl border border-white/10 text-xs font-medium">
             <button
               onClick={() => setActiveTab('shopping')}
@@ -318,104 +345,166 @@ export default function App() {
               <span>Orders ({orders.length})</span>
             </button>
 
-            {/* Developer Architecture Lab Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setIsDevMenuOpen(!isDevMenuOpen)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-                  activeTab !== 'shopping' && activeTab !== 'orders'
-                    ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 font-bold'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5 text-purple-400" />
-                <span>Agent Lab</span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
-              </button>
-
-              {isDevMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 w-64 p-2 rounded-xl bg-slate-950/95 border border-white/10 shadow-2xl backdrop-blur-2xl z-50 grid grid-cols-1 gap-1 text-xs font-mono">
-                  <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500">Agent Intelligence</div>
-                  <button onClick={() => { setActiveTab('brain'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧠 Brain &amp; LangGraph</button>
-                  <button onClick={() => { setActiveTab('specialized'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧩 Specialized Agents</button>
-                  <button onClick={() => { setActiveTab('memory'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">💾 4-Tier Memory &amp; Vector DB</button>
-                  <button onClick={() => { setActiveTab('observability'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">📈 Observability &amp; Waterfall</button>
-                  
-                  <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500 mt-1 border-t border-white/5 pt-1">Trust &amp; Infrastructure</div>
-                  <button onClick={() => { setActiveTab('merchants'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🏪 Merchant Simulator</button>
-                  <button onClick={() => { setActiveTab('gateway'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔌 Unified Gateway</button>
-                  <button onClick={() => { setActiveTab('payments'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">💳 Delegated Payments</button>
-                  <button onClick={() => { setActiveTab('security'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🛡️ Security &amp; Sanitizer</button>
-                  <button onClick={() => { setActiveTab('permissions'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔐 RBAC Permissions</button>
-                  <button onClick={() => { setActiveTab('resiliency'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔄 Failure Recovery</button>
-                  <button onClick={() => { setActiveTab('benchmark'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧪 Benchmark (TC01-TC12)</button>
-                  <button onClick={() => { setActiveTab('architecture'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🏗️ Architecture Topology</button>
-                  <button onClick={() => { setActiveTab('safety'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🛡️ Policies &amp; Audit</button>
-                  <button onClick={() => { setActiveTab('protocols'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🌐 UCP &amp; MCP Protocols</button>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setActiveTab('safety')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
+                activeTab === 'safety' 
+                  ? 'bg-indigo-600 text-white shadow-md font-bold' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5 text-purple-400" />
+              <span>Spending Policy</span>
+            </button>
           </nav>
 
           {/* Top Right Actions */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            {/* API Keys */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200 hover:text-white"
-              title="Configure Real API Keys"
+              className="btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-300 hover:text-white"
+              title="Configure API Keys"
             >
               <Settings className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden sm:inline">API Keys</span>
+              <span className="hidden md:inline">API Keys</span>
             </button>
 
+            {/* Cart Button */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative btn-secondary py-1.5 px-3 rounded-lg flex items-center gap-1.5 text-xs text-slate-200"
+              className="relative btn-secondary py-1.5 px-3.5 rounded-lg flex items-center gap-1.5 text-xs text-slate-200"
               title="View Cart"
             >
               <ShoppingBag className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Cart</span>
+              <span className="hidden md:inline">Cart</span>
               {cart?.items?.length > 0 && (
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">
                   {cart.items.length}
                 </span>
               )}
             </button>
+
+            {/* Discreet Developer Lab Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsDevMenuOpen(!isDevMenuOpen)}
+                className={`flex items-center gap-1 py-1.5 px-2.5 rounded-lg text-xs transition-all ${
+                  isDevTab
+                    ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 font-bold'
+                    : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                }`}
+                title="Agent Architecture & Diagnostics"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline text-[11px] font-mono">Dev Lab</span>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+
+              {isDevMenuOpen && (
+                <div className="absolute top-full right-0 mt-2 w-64 p-2 rounded-xl bg-slate-950/95 border border-white/10 shadow-2xl backdrop-blur-2xl z-50 grid grid-cols-1 gap-1 text-xs font-mono">
+                  <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500">Agent Intelligence</div>
+                  <button onClick={() => { setActiveTab('brain'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧠 Brain &amp; LangGraph</button>
+                  <button onClick={() => { setActiveTab('specialized'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧩 Specialized Subagents</button>
+                  <button onClick={() => { setActiveTab('memory'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">💾 4-Tier Memory &amp; Vector DB</button>
+                  <button onClick={() => { setActiveTab('observability'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">📈 Observability &amp; Waterfall</button>
+                  
+                  <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500 mt-1 border-t border-white/5 pt-1">Trust &amp; Infrastructure</div>
+                  <button onClick={() => { setActiveTab('merchants'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🏪 Merchant Simulator</button>
+                  <button onClick={() => { setActiveTab('gateway'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔌 Commerce Gateway</button>
+                  <button onClick={() => { setActiveTab('payments'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">💳 Delegated Payments</button>
+                  <button onClick={() => { setActiveTab('security'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🛡️ Security &amp; Sanitizer</button>
+                  <button onClick={() => { setActiveTab('permissions'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔐 RBAC Permissions</button>
+                  <button onClick={() => { setActiveTab('resiliency'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🔄 Failure Recovery</button>
+                  <button onClick={() => { setActiveTab('benchmark'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🧪 Benchmark (TC01-TC12)</button>
+                  <button onClick={() => { setActiveTab('architecture'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🏗️ Architecture Topology</button>
+                  <button onClick={() => { setActiveTab('protocols'); setIsDevMenuOpen(false); }} className="p-2 text-left hover:bg-white/5 rounded-lg text-slate-200 flex items-center gap-2">🌐 UCP &amp; MCP Protocols</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 flex-1 w-full">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex-1 w-full">
+        {/* Back Button if in Dev Tab */}
+        {isDevTab && (
+          <div className="mb-4">
+            <button
+              onClick={() => setActiveTab('shopping')}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors bg-white/[0.03] px-3 py-1.5 rounded-lg border border-white/5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Shopping</span>
+            </button>
+          </div>
+        )}
+
         {/* TAB 1: SHOPPING COPILOT */}
         {activeTab === 'shopping' && (
-          <div className="space-y-8 animate-in fade-in duration-300">
-            {/* Hero Chat Interface */}
+          <div className="space-y-6 animate-in fade-in duration-300">
+            {/* Hero Search Interface */}
             <ChatInterface 
               onSubmitQuery={handleSearchQuery}
               isLoading={isLoading}
-              extractedReqs={recommendation?.requirements_extracted}
             />
 
-            {/* Agent Live Reasoning Trace */}
+            {/* Agent Live Reasoning Trace (Collapsible) */}
             {recommendation?.trace && (
               <AgentTraceTimeline trace={recommendation.trace} />
             )}
 
-            {/* Top Pick Highlight & Catalog Cards */}
-            {recommendation?.comparison_table && recommendation.comparison_table.length > 0 && (
-              <div className="space-y-4">
+            {/* When No Search Has Occurred: Clean Featured Showcase */}
+            {!recommendation && !isLoading && (
+              <div className="pt-4 space-y-4 max-w-4xl mx-auto">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-400" />
+                  <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider font-mono">
+                    Featured Autonomous Categories
+                  </h2>
+                  <span className="text-xs text-slate-500">Live multi-merchant search</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {FEATURED_CATEGORIES.map((cat, idx) => (
+                    <div 
+                      key={idx}
+                      onClick={() => handleSearchQuery(cat.query)}
+                      className="glass-panel p-4 border-white/10 hover:border-indigo-500/40 cursor-pointer transition-all duration-200 hover:scale-[1.01] rounded-2xl bg-slate-900/60 group"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5 group-hover:bg-indigo-600/20 group-hover:border-indigo-500/30 transition-all">
+                          {cat.icon}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
+                            {cat.title}
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {cat.desc}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Product Recommendations & Ranking */}
+            {recommendation?.comparison_table && recommendation.comparison_table.length > 0 && (
+              <div className="space-y-6 pt-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-400" />
                     Autonomous Product Evaluation &amp; Ranking
                   </h3>
-                  <span className="text-xs text-slate-400">
-                    Showing top candidates matching your specs
+                  <span className="text-xs text-slate-400 font-mono">
+                    {recommendation.comparison_table.length} verified candidate products
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {recommendation.comparison_table.map((prod, idx) => (
                     <ProductCard
                       key={prod.id || idx}
@@ -427,116 +516,29 @@ export default function App() {
                     />
                   ))}
                 </div>
-              </div>
-            )}
 
-            {/* Side-by-Side Comparison Matrix */}
-            {recommendation?.comparison_table && (
-              <ComparisonMatrix 
-                products={recommendation.comparison_table}
-                topProduct={recommendation.top_recommendation}
-                explanation={recommendation.explanation}
-                tradeOffAnalysis={recommendation.trade_off_analysis}
-                onSelectProduct={(p) => handleInstantBuy(p)}
-              />
-            )}
-          </div>
-        )}
-
-        {/* TAB 2: THE AGENT BRAIN */}
-        {activeTab === 'brain' && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            <AgentBrainMap activeStage={brainState?.session?.active_stage || "IDLE"} />
-
-            {/* Session Context State Inspector */}
-            {brainState && (
-              <div className="glass-panel p-6 border-white/10 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                  <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
-                    <Brain className="w-4 h-4 text-cyan-400" />
-                    ContextStore: Active Session State &amp; Working Memory
-                  </h3>
-                  <span className="badge badge-cyan text-xs font-mono">
-                    Session: {brainState.session.session_id}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                  <div className="p-3.5 rounded-lg bg-black/40 border border-white/5 space-y-2">
-                    <div className="text-slate-400 font-bold">User Profile &amp; Preferences:</div>
-                    <div className="text-slate-200">Name: {brainState.user_profile.name}</div>
-                    <div className="text-slate-200">Brand Affinity: {brainState.user_profile.brand_affinity.join(', ')}</div>
-                    <div className="text-slate-200">Default Shipping: {brainState.user_profile.default_shipping_address}</div>
-                  </div>
-
-                  <div className="p-3.5 rounded-lg bg-black/40 border border-white/5 space-y-2">
-                    <div className="text-slate-400 font-bold">Supervisor Working Scratchpad:</div>
-                    <pre className="text-cyan-300 text-[11px] overflow-x-auto">
-                      {JSON.stringify(brainState.session.agent_scratchpad, null, 2)}
-                    </pre>
-                  </div>
-                </div>
+                {/* Side-by-Side Comparison Matrix */}
+                <ComparisonMatrix 
+                  products={recommendation.comparison_table}
+                  topProduct={recommendation.top_recommendation}
+                  explanation={recommendation.explanation}
+                  tradeOffAnalysis={recommendation.trade_off_analysis}
+                  onSelectProduct={(p) => handleInstantBuy(p)}
+                />
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 3: SPECIALIZED AGENTS */}
-        {activeTab === 'specialized' && (
-          <SpecializedAgentsConsole />
+        {/* TAB 2: MY ORDERS */}
+        {activeTab === 'orders' && (
+          <OrdersTracker 
+            orders={orders}
+            onReturnOrder={handleReturnOrder}
+          />
         )}
 
-        {/* TAB 4: MERCHANT SIMULATOR */}
-        {activeTab === 'merchants' && (
-          <MerchantSimulatorExplorer />
-        )}
-
-        {/* TAB 5: COMMERCE GATEWAY & CAPABILITIES */}
-        {activeTab === 'gateway' && (
-          <CommerceGatewayExplorer />
-        )}
-
-        {/* TAB 6: PAYMENTS & DELEGATED AUTHORIZATION */}
-        {activeTab === 'payments' && (
-          <DelegatedPaymentSandbox />
-        )}
-
-        {/* TAB 7: AGENT SECURITY & PROMPT INJECTION DEFENSE */}
-        {activeTab === 'security' && (
-          <AgentSecurityCenter />
-        )}
-
-        {/* TAB 8: TOOL PERMISSIONS MATRIX */}
-        {activeTab === 'permissions' && (
-          <ToolPermissionsMatrix />
-        )}
-
-        {/* TAB 9: DISTRIBUTED FAILURE RECOVERY */}
-        {activeTab === 'resiliency' && (
-          <FailureRecoveryCenter />
-        )}
-
-        {/* TAB 10: MULTI-TIER MEMORY SUBSYSTEM */}
-        {activeTab === 'memory' && (
-          <MemoryConsole />
-        )}
-
-        {/* TAB 11: AGENT OBSERVABILITY & TELEMETRY */}
-        {activeTab === 'observability' && (
-          <AgentObservabilityConsole />
-        )}
-
-        {/* TAB 12: EVALUATION & BENCHMARK HARNESS */}
-        {activeTab === 'benchmark' && (
-          <BenchmarkEvaluationConsole />
-        )}
-
-        {/* TAB 13: TARGET ARCHITECTURE & TOPOLOGY */}
-        {activeTab === 'architecture' && (
-          <SystemArchitectureMap />
-        )}
-
-        {/* TAB 14: TRUST & SAFETY */}
+        {/* TAB 3: SPENDING POLICY */}
         {activeTab === 'safety' && (
           <SafetyDashboard 
             policy={policy}
@@ -547,18 +549,20 @@ export default function App() {
           />
         )}
 
-        {/* TAB 15: PROTOCOLS & MCP */}
-        {activeTab === 'protocols' && (
-          <ProtocolExplorer />
-        )}
-
-        {/* TAB 16: ORDERS & RETURNS */}
-        {activeTab === 'orders' && (
-          <OrdersTracker 
-            orders={orders}
-            onReturnOrder={handleReturnOrder}
-          />
-        )}
+        {/* DEV LAB TABS */}
+        {activeTab === 'brain' && <AgentBrainMap activeStage={brainState?.session?.active_stage || "IDLE"} />}
+        {activeTab === 'specialized' && <SpecializedAgentsConsole />}
+        {activeTab === 'merchants' && <MerchantSimulatorExplorer />}
+        {activeTab === 'gateway' && <CommerceGatewayExplorer />}
+        {activeTab === 'payments' && <DelegatedPaymentSandbox />}
+        {activeTab === 'security' && <AgentSecurityCenter />}
+        {activeTab === 'permissions' && <ToolPermissionsMatrix />}
+        {activeTab === 'resiliency' && <FailureRecoveryCenter />}
+        {activeTab === 'memory' && <MemoryConsole />}
+        {activeTab === 'observability' && <AgentObservabilityConsole />}
+        {activeTab === 'benchmark' && <BenchmarkEvaluationConsole />}
+        {activeTab === 'architecture' && <SystemArchitectureMap />}
+        {activeTab === 'protocols' && <ProtocolExplorer />}
       </main>
 
       {/* Human-in-the-Loop Security Authorization Modal */}

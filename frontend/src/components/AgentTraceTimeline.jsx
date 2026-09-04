@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, AlertTriangle, Clock, ChevronDown, ChevronUp, Cpu, ShieldAlert, Globe, BarChart3, Brain, Sparkles } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, ShieldAlert, Globe, BarChart3, Brain, Sparkles, Check, Cpu } from 'lucide-react';
 
 export default function AgentTraceTimeline({ trace }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -15,47 +15,46 @@ export default function AgentTraceTimeline({ trace }) {
   };
 
   const getStepIcon = (title, status) => {
-    if (status === 'warning') return <ShieldAlert className="w-4 h-4 text-amber-400" />;
-    if (title.includes('Intent') || title.includes('Requirement')) return <Brain className="w-4 h-4 text-indigo-400" />;
-    if (title.includes('Merchant') || title.includes('Discovery')) return <Globe className="w-4 h-4 text-cyan-400" />;
-    if (title.includes('MCDA') || title.includes('Scoring') || title.includes('Ranking')) return <BarChart3 className="w-4 h-4 text-purple-400" />;
-    if (title.includes('Security') || title.includes('Guardrail')) return <ShieldAlert className="w-4 h-4 text-amber-400" />;
-    return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
+    if (status === 'warning') return <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />;
+    if (title.includes('Intent') || title.includes('Requirement')) return <Brain className="w-3.5 h-3.5 text-indigo-400" />;
+    if (title.includes('Merchant') || title.includes('Discovery')) return <Globe className="w-3.5 h-3.5 text-cyan-400" />;
+    if (title.includes('MCDA') || title.includes('Scoring') || title.includes('Ranking')) return <BarChart3 className="w-3.5 h-3.5 text-purple-400" />;
+    if (title.includes('Security') || title.includes('Guardrail')) return <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />;
+    return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />;
   };
 
   const totalTime = trace.reduce((acc, s) => acc + (s.execution_time_ms || 25), 0);
 
   return (
-    <div className="rounded-xl border border-indigo-500/20 bg-slate-900/60 backdrop-blur-md overflow-hidden transition-all my-4">
+    <div className="rounded-xl border border-indigo-500/20 bg-slate-900/60 backdrop-blur-md overflow-hidden transition-all my-3 max-w-4xl mx-auto">
       {/* Compact Collapsible Header */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.03] transition-colors text-left"
+        className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors text-left"
       >
         <div className="flex items-center gap-2.5">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            Autonomous Agent Thought Pipeline
+            Autonomous Agent Reasoning Pipeline
           </span>
           <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
-            • {trace.length} steps completed in {totalTime}ms
+            • {trace.length} subagent steps verified in {totalTime}ms
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-indigo-400">
-          <span>{isOpen ? "Hide Details" : "View Reasoning"}</span>
-          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300">
+          <span>{isOpen ? "Hide Pipeline" : "View Agent Steps"}</span>
+          {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </div>
       </button>
 
       {/* Expanded Step Trace */}
       {isOpen && (
-        <div className="p-4 border-t border-white/10 space-y-3 font-mono text-xs bg-black/40 animate-in fade-in duration-200">
+        <div className="p-4 border-t border-white/10 space-y-2.5 font-mono text-xs bg-black/40 animate-in fade-in duration-200">
           <div className="space-y-2 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-gradient-to-b before:from-indigo-500 before:via-cyan-500 before:to-emerald-500">
             {trace.map((step, idx) => {
               const isExpanded = !!expandedSteps[idx];
-              const isWarning = step.status === 'warning';
 
               return (
                 <div key={idx} className="relative pl-8">
