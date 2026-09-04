@@ -15,7 +15,8 @@ from backend.domain.agent_schemas import (
     ShoppingIntent, RecommendationResponse, AgentPlan,
     AgentIntentRequest, AgentIntentResponse,
     AgentSessionRequest, AgentSessionResponse, ExecutionPlan,
-    DiscoveryRequest, DiscoveryResult
+    DiscoveryRequest, DiscoveryResult,
+    ConstraintFilterRequest, ConstraintFilterResult
 )
 from backend.agent.intent_parser import IntentParser
 from backend.agent.workflow_planner import WorkflowPlanner
@@ -23,6 +24,7 @@ from backend.agent.agent_planner import AgentPlanner
 from backend.agent.agent_runner import ShoppingAgentRunner
 from backend.agent.agent_graph import ShoppingAgentGraph
 from backend.agent.discovery_service import DiscoveryService
+from backend.agent.constraint_engine import ConstraintEngine
 
 agent_router = APIRouter(prefix="/agent", tags=["Autonomous Shopping Agent"])
 
@@ -168,4 +170,37 @@ def discover_session_products(
         page=request.page,
         page_size=request.page_size,
         in_stock_only=request.in_stock_only
+    )
+
+
+@agent_router.post(
+    "/filter",
+    response_model=ConstraintFilterResult,
+    status_code=status.HTTP_200_OK,
+    summary="Deterministic Hard-Constraint Filtering",
+    description="Evaluates product candidates against non-negotiable intent constraints with Decimal financial precision and transparent reason codes."
+)
+def filter_candidates(
+    request: ConstraintFilterRequest
+) -> ConstraintFilterResult:
+    return ConstraintEngine.filter_products(
+        candidates=request.products,
+        intent=request.intent
+    )
+
+
+@agent_router.post(
+    "/sessions/{session_id}/filter",
+    response_model=ConstraintFilterResult,
+    status_code=status.HTTP_200_OK,
+    summary="Session-Scoped Constraint Filtering",
+    description="Evaluates product candidates within an active agent session against intent constraints."
+)
+def filter_session_candidates(
+    session_id: str,
+    request: ConstraintFilterRequest
+) -> ConstraintFilterResult:
+    return ConstraintEngine.filter_products(
+        candidates=request.products,
+        intent=request.intent
     )

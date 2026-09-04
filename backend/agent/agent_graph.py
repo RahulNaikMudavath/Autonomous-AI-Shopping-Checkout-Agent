@@ -250,6 +250,68 @@ class ShoppingAgentGraph:
         return state
 
     @classmethod
+    def apply_hard_constraints_node(cls, state: ShoppingAgentState) -> ShoppingAgentState:
+        """
+        Step 4: Deterministic Hard-Constraint Filtering.
+        Filters discovered products against non-negotiable budget bounds, stock availability,
+        and technical specification minimums. Zero LLM involvement.
+        """
+        if state.status == "FAILED" or not state.shopping_intent:
+            return state
+
+        start_time = time.perf_counter()
+        try:
+            from backend.agent.constraint_engine import ConstraintEngine
+            filter_res = ConstraintEngine.filter_products(
+                candidates=state.discovered_products,
+                intent=state.shopping_intent
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # Retain only passing candidates in state
+            state.discovered_products = filter_res.passed_candidates
+            state.metadata["constraint_filtering"] = {
+                "total_input": filter_res.total_input,
+                "total_passed": filter_res.total_passed,
+                "total_rejected": filter_res.total_rejected,
+                "rejection_summary": filter_res.rejection_summary,
+                "execution_time_ms": elapsed_ms
+            }
+
+            if state.execution_plan:
+                cons_step = next((s for s in state.execution_plan.steps if s.action == AgentAction.APPLY_CONSTRAINTS), None)
+                if cons_step:
+                    cons_step.status = "COMPLETED"
+                    cons_step.execution_time_ms = elapsed_ms
+
+            state.trace_steps.append(AgentTraceStep(
+                step_id="step_hard_constraints",
+                title="Deterministic Hard-Constraint Filtering",
+                agent_name="ConstraintEngine",
+                status="completed",
+                summary=f"Filtered {filter_res.total_input} candidates: {filter_res.total_passed} passed, {filter_res.total_rejected} rejected",
+                details={
+                    "total_input": filter_res.total_input,
+                    "passed_count": filter_res.total_passed,
+                    "rejected_count": filter_res.total_rejected,
+                    "rejection_summary": filter_res.rejection_summary
+                },
+                execution_time_ms=elapsed_ms
+            ))
+        except Exception as e:
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            state.errors.append(f"CONSTRAINT_FILTER_FAILED: {str(e)}")
+            state.trace_steps.append(AgentTraceStep(
+                step_id="step_hard_constraints",
+                title="Deterministic Hard-Constraint Filtering",
+                agent_name="ConstraintEngine",
+                status="failed",
+                summary=f"Constraint filtering failed: {str(e)}",
+                execution_time_ms=elapsed_ms
+            ))
+        return state
+
+    @classmethod
     def complete_node(cls, state: ShoppingAgentState) -> ShoppingAgentState:
         """Finalizes graph execution and sets completion state."""
         if state.status != "FAILED" and state.status != "CLARIFICATION_REQUIRED":
@@ -292,6 +354,7 @@ class ShoppingAgentGraph:
             state = cls.clarification_node(state)
         elif route == "discovery":
             state = cls.discovery_node(state, db=db)
+            state = cls.apply_hard_constraints_node(state)
             state = cls.complete_node(state)
         elif route == "failure":
             state.status = "FAILED"

@@ -275,15 +275,72 @@ class CanonicalProduct(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class ConstraintViolation(BaseModel):
+    """
+    Structured machine-readable constraint violation description.
+    """
+    constraint: str
+    reason_code: str
+    message: str
+    expected: Optional[Any] = None
+    actual: Optional[Any] = None
+
+
+class ConstraintEvaluation(BaseModel):
+    """
+    Structured constraint evaluation record for a single candidate.
+    """
+    candidate_id: str
+    product_id: Optional[str] = None
+    merchant_code: Optional[str] = None
+    passed: bool
+    violations: List[ConstraintViolation] = Field(default_factory=list)
+    evaluated_constraints: List[str] = Field(default_factory=list)
+    unknown_constraints: List[str] = Field(default_factory=list)
+    soft_penalties: List[str] = Field(default_factory=list)
+
+
 class ConstraintEvaluationResult(BaseModel):
     """
     Detailed audit result for constraint evaluation on a single candidate.
+    Preserves both legacy list strings and machine-readable violation models.
     """
     candidate_id: str
-    passed_all_hard_constraints: bool
+    product_id: Optional[str] = None
+    merchant_code: Optional[str] = None
+    passed_all_hard_constraints: bool = True
+    passed: bool = True
+    violations: List[ConstraintViolation] = Field(default_factory=list)
     passed_constraints: List[str] = Field(default_factory=list)
     failed_constraints: List[str] = Field(default_factory=list)
+    unknown_constraints: List[str] = Field(default_factory=list)
     soft_penalties: List[str] = Field(default_factory=list)
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.passed or self.failed_constraints or self.violations:
+            self.passed = False
+            self.passed_all_hard_constraints = False
+        else:
+            self.passed = True
+            self.passed_all_hard_constraints = True
+
+
+class ConstraintFilterRequest(BaseModel):
+    intent: ShoppingIntent
+    products: List[NormalizedProductCandidate] = Field(default_factory=list)
+
+
+class ConstraintFilterResult(BaseModel):
+    total_input: int
+    total_passed: int
+    total_rejected: int
+    passed_candidates: List[NormalizedProductCandidate] = Field(default_factory=list)
+    rejected_candidates: List[NormalizedProductCandidate] = Field(default_factory=list)
+    evaluations: List[ConstraintEvaluationResult] = Field(default_factory=list)
+    rejection_summary: Dict[str, int] = Field(default_factory=dict)
+    execution_time_ms: int = 0
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class MCDAScoreBreakdown(BaseModel):

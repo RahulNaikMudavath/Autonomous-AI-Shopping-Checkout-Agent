@@ -173,6 +173,8 @@ class CatalogService:
                 brand=p.brand,
                 category=p.category,
                 model=p.model,
+                description=p.description,
+                specs=p.specs or {},
                 base_price=quantize_money(p.base_price),
                 current_price=quantize_money(p.current_price),
                 currency=p.currency,

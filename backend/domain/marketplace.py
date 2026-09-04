@@ -108,6 +108,8 @@ class ProductSummary(BaseModel):
     brand: str
     category: str
     model: Optional[str] = None
+    description: Optional[str] = None
+    specs: Dict[str, Any] = Field(default_factory=dict)
     base_price: Decimal = Field(..., decimal_places=2)
     current_price: Decimal = Field(..., decimal_places=2)
     currency: str = "INR"
@@ -122,8 +124,6 @@ class ProductSummary(BaseModel):
 
 
 class ProductDetail(ProductSummary):
-    description: Optional[str] = None
-    specs: Dict[str, Any] = Field(default_factory=dict)
     shipping_options: List[Dict[str, Any]] = Field(default_factory=list)
     discount_percentage: Optional[float] = None
     created_at: Optional[str] = None
