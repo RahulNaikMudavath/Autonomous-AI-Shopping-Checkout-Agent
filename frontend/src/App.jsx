@@ -31,6 +31,7 @@ import AgentObservabilityConsole from './components/AgentObservabilityConsole';
 import BenchmarkEvaluationConsole from './components/BenchmarkEvaluationConsole';
 import SystemArchitectureMap from './components/SystemArchitectureMap';
 import ApiSettingsModal from './components/ApiSettingsModal';
+import CheckoutQuoteModal from './components/CheckoutQuoteModal';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -59,6 +60,9 @@ export default function App() {
   const [isHitlModalOpen, setIsHitlModalOpen] = useState(false);
   const [selectedHitlProduct, setSelectedHitlProduct] = useState(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutQuote, setCheckoutQuote] = useState(null);
+  const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [successToast, setSuccessToast] = useState(null);
 
   // Sync Dark mode with DOM
@@ -331,6 +335,42 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handlePrepareCheckoutQuote = async () => {
+    if (!cart || !cart.id || !cart.items || cart.items.length === 0) {
+      triggerToast("⚠️ Cart is empty. Add products before requesting a checkout quote.");
+      return;
+    }
+    setIsQuoteLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/checkout/prepare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cart_id: cart.id
+        })
+      });
+      if (res.ok) {
+        const quoteData = await res.json();
+        setCheckoutQuote(quoteData);
+        setIsCartOpen(false);
+        setIsQuoteModalOpen(true);
+        if (quoteData.price_changed) {
+          triggerToast("⚠️ Live price change detected — checkout quote updated.");
+        } else {
+          triggerToast("📋 Authoritative checkout quote generated.");
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        triggerToast(`❌ ${err.error?.message || err.detail || "Unable to prepare checkout quote"}`);
+      }
+    } catch (err) {
+      console.error("Error preparing checkout quote:", err);
+      triggerToast("❌ Network error connecting to checkout quote service");
+    } finally {
+      setIsQuoteLoading(false);
     }
   };
 
@@ -1331,12 +1371,17 @@ export default function App() {
         onRemoveItem={handleRemoveFromCart}
         onUpdateQuantity={handleUpdateCartItemQuantity}
         onClearCart={handleClearCart}
-        onCheckout={() => {
-          if (cart?.items?.[0]) {
-            handleInstantBuy(cart.items[0].product || cart.items[0]);
-            setIsCartOpen(false);
-          }
-        }}
+        onCheckout={handlePrepareCheckoutQuote}
+        isProcessing={isQuoteLoading}
+      />
+
+      {/* Checkout Quote Preview Modal (Phase 4 Step 3) */}
+      <CheckoutQuoteModal
+        isOpen={isQuoteModalOpen}
+        onClose={() => setIsQuoteModalOpen(false)}
+        quote={checkoutQuote}
+        onRefreshQuote={handlePrepareCheckoutQuote}
+        isLoading={isQuoteLoading}
       />
 
       {/* Human In The Loop Approval Modal */}

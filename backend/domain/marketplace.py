@@ -327,6 +327,7 @@ class CheckoutPrepareRequest(BaseModel):
     shipping_option_id: Optional[str] = None
     promo_code: Optional[str] = None
     shipping_address: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class CheckoutItemSummary(BaseModel):
@@ -340,6 +341,7 @@ class CheckoutItemSummary(BaseModel):
 
 class CheckoutSummaryResponse(BaseModel):
     checkout_session_id: str
+    quote_id: Optional[str] = None
     cart_id: str
     merchant_code: str
     merchant_name: str
@@ -353,6 +355,9 @@ class CheckoutSummaryResponse(BaseModel):
     shipping_option: Optional[ShippingOptionDetail] = None
     applied_promo: Optional[str] = None
     status: CheckoutSessionStatus = CheckoutSessionStatus.PENDING
+    price_changed: bool = False
+    is_stale: bool = False
+    warnings: List[str] = Field(default_factory=list)
     expires_at: str
     created_at: str
 
