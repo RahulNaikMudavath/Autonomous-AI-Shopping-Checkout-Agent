@@ -1,36 +1,30 @@
-# Multi-stage Dockerfile for AgentCart Autonomous AI Shopping & Checkout Agent
-FROM node:20-alpine AS frontend-builder
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ ./
-RUN npm run build
+# Multi-stage production and development Dockerfile for AgentCart Backend
+FROM python:3.11-slim AS backend-runtime
 
-FROM python:3.11-slim AS production
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (curl for healthchecks, build tools if needed)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend source
+# Copy backend application source code
 COPY backend/ ./backend/
 COPY tests/ ./tests/
+COPY alembic.ini .
 
-# Copy built frontend assets to serve or embed
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
-
-# Expose ports
+# Expose backend port
 EXPOSE 8000
 
 # Environment defaults
 ENV PYTHONUNBUFFERED=1
-ENV ENVIRONMENT=production
+ENV ENVIRONMENT=development
 
 # Run FastAPI server
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

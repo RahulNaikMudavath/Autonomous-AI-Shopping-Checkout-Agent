@@ -1,36 +1,52 @@
 version: '3.8'
 
 services:
-  # 1. FastAPI API Gateway & LangGraph Agent Supervisor
-  agentcart-api:
+  # 1. FastAPI Backend Service (API Gateway & Domain Engine)
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
+      target: backend-runtime
     container_name: agentcart_backend
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=production
+      - APP_NAME=AgentCart API
+      - ENVIRONMENT=development
+      - DEBUG=true
       - DATABASE_URL=postgresql://agentcart:securepass@postgres:5432/agentcart_db
       - REDIS_URL=redis://redis:6379/0
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173","http://127.0.0.1:3000","http://127.0.0.1:5173","*"]
     depends_on:
-      - postgres
-      - redis
-    restart: always
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+      - ./tests:/app/tests
+    restart: unless-stopped
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
-  # 2. React / Vite / Next.js User Interface
-  agentcart-ui:
+  # 2. Frontend User Interface (React + Vite)
+  frontend:
     build:
       context: ./frontend
-      dockerfile: ../Dockerfile
-      target: frontend-builder
+      dockerfile: Dockerfile
     container_name: agentcart_frontend
     ports:
-      - "3000:80"
-    restart: always
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
 
-  # 3. PostgreSQL 16 with pgvector Extension
+  # 3. PostgreSQL 16 Database with pgvector Extension
   postgres:
     image: pgvector/pgvector:pg16
     container_name: agentcart_postgres
@@ -42,9 +58,14 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentcart -d agentcart_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
-  # 4. Redis Ephemeral Cache & State Locks
+  # 4. Redis 7.2 Cache & Ephemeral State Store
   redis:
     image: redis:7.2-alpine
     container_name: agentcart_redis
@@ -52,17 +73,24 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
-  # 5. OpenTelemetry Collector & Jaeger Tracing
+  # 5. OpenTelemetry Collector & Distributed Tracing
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: agentcart_otel
     ports:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
-    restart: always
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    name: agentcart_postgres_data
   redis_data:
+    name: agentcart_redis_data

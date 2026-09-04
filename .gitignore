@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 env/
+.venv/
 build/
 develop-eggs/
 dist/
@@ -24,6 +25,12 @@ wheels/
 .coverage
 htmlcov/
 .env
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+agentcart_local.db
 
 # Node
 node_modules/
