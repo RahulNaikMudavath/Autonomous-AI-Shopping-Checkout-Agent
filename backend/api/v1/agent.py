@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from backend.database.session import get_db_session
 from backend.domain.agent_schemas import (
-    ShoppingIntent, RecommendationResponse, AgentPlan
+    ShoppingIntent, RecommendationResponse, AgentPlan,
+    AgentIntentRequest, AgentIntentResponse
 )
 from backend.agent.intent_parser import IntentParser
 from backend.agent.workflow_planner import WorkflowPlanner
@@ -25,11 +26,6 @@ class AgentQueryRequest(BaseModel):
     query: str = Field(..., min_length=2, description="Natural language shopping request")
     session_id: Optional[str] = Field(default=None, description="Optional active shopping session ID")
     user_id: str = Field(default="default_user", description="User identity")
-
-
-class AgentIntentRequest(BaseModel):
-    query: str = Field(..., min_length=2, description="Natural language shopping prompt")
-    previous_intent: Optional[ShoppingIntent] = Field(default=None, description="Previous turn intent for refinement")
 
 
 @agent_router.post(
@@ -61,8 +57,9 @@ def run_autonomous_shopping_agent(
 def extract_shopping_intent(
     request: AgentIntentRequest
 ) -> ShoppingIntent:
+    query_text = request.get_query_text()
     return IntentParser.parse_intent(
-        query=request.query,
+        query=query_text,
         previous_intent=request.previous_intent
     )
 

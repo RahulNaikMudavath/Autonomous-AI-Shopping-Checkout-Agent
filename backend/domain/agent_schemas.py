@@ -49,7 +49,17 @@ class SpecificationConstraint(BaseModel):
     operator: ConstraintOperator = Field(default=ConstraintOperator.GTE, description="Comparison operator")
     target_value: Any = Field(..., description="Target threshold or expected value")
     is_hard_constraint: bool = Field(default=True, description="True = hard filter (reject if not met); False = soft preference")
+    unit: Optional[str] = Field(default=None, description="e.g. GB, TB, Hz, W, kg, inches, hours")
     description: Optional[str] = None
+
+
+class BudgetConstraint(BaseModel):
+    """
+    Structured nested budget boundary container.
+    """
+    min: Optional[Decimal] = None
+    max: Optional[Decimal] = None
+    currency: str = "INR"
 
 
 class ShoppingIntent(BaseModel):
@@ -58,7 +68,10 @@ class ShoppingIntent(BaseModel):
     """
     raw_query: str
     category: str = Field(default="laptops", description="Target product category (laptops, smartphones, headphones, monitors, etc.)")
-    target_use_case: Optional[str] = Field(default=None, description="e.g. AI/ML development, Esports Gaming, Office Productivity")
+    query: Optional[str] = Field(default=None, description="Cleaned search query keyword")
+    purpose: Optional[str] = Field(default=None, description="e.g. AI/ML development, Esports Gaming, Office Productivity")
+    target_use_case: Optional[str] = Field(default=None, description="Alias for purpose")
+    quantity: int = Field(default=1, ge=1, description="Quantity of units requested")
     
     # Financial Constraints (Strict Decimals)
     budget_max: Optional[Decimal] = Field(default=None, description="Maximum budget threshold in INR")
@@ -83,6 +96,72 @@ class ShoppingIntent(BaseModel):
     clarification_needed: Optional[str] = None
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @classmethod
+    def validate_budget_bounds(cls, b_min: Optional[Decimal], b_max: Optional[Decimal]) -> None:
+        if b_min is not None and b_min < Decimal("0.00"):
+            raise ValueError("budget_min cannot be negative")
+        if b_max is not None and b_max < Decimal("0.00"):
+            raise ValueError("budget_max cannot be negative")
+        if b_min is not None and b_max is not None and b_min > b_max:
+            raise ValueError(f"Impossible budget range: budget_min ({b_min}) exceeds budget_max ({b_max})")
+
+    def model_post_init(self, __context: Any) -> None:
+        self.validate_budget_bounds(self.budget_min, self.budget_max)
+        if self.quantity < 1:
+            raise ValueError("quantity must be at least 1")
+        if not self.query and self.category:
+            self.query = self.category
+        if not self.target_use_case and self.purpose:
+            self.target_use_case = self.purpose
+        elif not self.purpose and self.target_use_case:
+            self.purpose = self.target_use_case
+
+    @property
+    def budget(self) -> BudgetConstraint:
+        return BudgetConstraint(min=self.budget_min, max=self.budget_max, currency=self.currency)
+
+    @property
+    def hard_constraints(self) -> Dict[str, Any]:
+        return {
+            "budget_max": self.budget_max,
+            "budget_min": self.budget_min,
+            "currency": self.currency,
+            "require_in_stock": self.require_in_stock,
+            "specifications": [c for c in self.spec_constraints if c.is_hard_constraint],
+            "required_keywords": self.required_keywords,
+            "excluded_keywords": self.excluded_keywords
+        }
+
+    @property
+    def preferences(self) -> Dict[str, Any]:
+        return {
+            "brand_preferences": self.brand_preferences,
+            "merchant_preferences": self.merchant_preferences,
+            "delivery_preference": self.delivery_preference,
+            "min_rating": self.min_rating,
+            "objective": self.objective,
+            "soft_specifications": [c for c in self.spec_constraints if not c.is_hard_constraint]
+        }
+
+
+class AgentIntentRequest(BaseModel):
+    query: Optional[str] = Field(default=None, description="Natural language shopping prompt")
+    message: Optional[str] = Field(default=None, description="Alternative alias for query")
+    previous_intent: Optional[ShoppingIntent] = Field(default=None, description="Previous turn intent for refinement")
+
+    def get_query_text(self) -> str:
+        text = self.query or self.message
+        if not text or not text.strip():
+            raise ValueError("Query or message must be provided and non-empty.")
+        return text.strip()
+
+
+class AgentIntentResponse(BaseModel):
+    intent: ShoppingIntent
+    status: str = "VALID"  # "VALID", "AMBIGUOUS", "INVALID"
+    message: str = "Intent extracted successfully"
+    latency_ms: int = 0
 
 
 class NormalizedProductCandidate(BaseModel):
