@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. FastAPI Backend Service (API Gateway & Domain Engine)
   backend:
@@ -54,8 +52,6 @@ services:
       POSTGRES_USER: agentcart
       POSTGRES_PASSWORD: securepass
       POSTGRES_DB: agentcart_db
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
