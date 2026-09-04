@@ -45,10 +45,19 @@ class CartStatus(str, Enum):
 
 
 class CheckoutSessionStatus(str, Enum):
-    PENDING = "PENDING"
+    QUOTE_CREATED = "QUOTE_CREATED"
+    QUOTE_VALID = "QUOTE_VALID"
+    AUTHORIZATION_REQUIRED = "AUTHORIZATION_REQUIRED"
+    AUTHORIZED = "AUTHORIZED"
+    PAYMENT_PENDING = "PAYMENT_PENDING"
+    PAID = "PAID"
+    ORDER_PENDING = "ORDER_PENDING"
     COMPLETED = "COMPLETED"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
+    INVALID = "INVALID"
+    PENDING = "PENDING"  # Backward-compatible alias for QUOTE_CREATED
 
 
 class OrderStatus(str, Enum):
@@ -358,8 +367,50 @@ class CheckoutSummaryResponse(BaseModel):
     price_changed: bool = False
     is_stale: bool = False
     warnings: List[str] = Field(default_factory=list)
+    state_history: List[Dict[str, Any]] = Field(default_factory=list)
     expires_at: str
     created_at: str
+
+
+class CheckoutTransitionAction(str, Enum):
+    VALIDATE_QUOTE = "validate_quote"
+    REQUEST_AUTHORIZATION = "request_authorization"
+    AUTHORIZE = "authorize"
+    INITIATE_PAYMENT = "initiate_payment"
+    CONFIRM_PAYMENT = "confirm_payment"
+    SUBMIT_ORDER = "submit_order"
+    COMPLETE = "complete"
+    CANCEL = "cancel"
+    FAIL = "fail"
+    INVALIDATE = "invalidate"
+
+
+class CheckoutTransitionRequest(BaseModel):
+    action: CheckoutTransitionAction = Field(..., description="Semantic action to execute on checkout session")
+    reason: Optional[str] = Field(default=None, description="Optional explanation or context for transition")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context metadata")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class StateTransitionAuditLog(BaseModel):
+    previous_state: str
+    target_state: str
+    action: str
+    timestamp: str
+    reason: Optional[str] = None
+    success: bool = True
+
+
+class CheckoutTransitionResponse(BaseModel):
+    success: bool = True
+    message: str
+    checkout_session_id: str
+    previous_state: str
+    current_state: CheckoutSessionStatus
+    action: CheckoutTransitionAction
+    checkout: CheckoutSummaryResponse
+    audit_log: Optional[StateTransitionAuditLog] = None
 
 
 # =====================================================================

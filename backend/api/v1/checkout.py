@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from backend.database.session import get_db_session
 from backend.database.models import MerchantModel
 from backend.domain.marketplace import (
-    CheckoutPrepareRequest, CheckoutSummaryResponse, ShippingOptionDetail
+    CheckoutPrepareRequest, CheckoutSummaryResponse, ShippingOptionDetail,
+    CheckoutTransitionRequest, CheckoutTransitionResponse
 )
 from backend.services.checkout_service import CheckoutService
+from backend.services.checkout_state_machine import CheckoutStateMachine
 from backend.services.shipping_service import ShippingService
 from backend.services.pricing_service import quantize_money
 from backend.core.errors import EntityNotFoundException
@@ -47,6 +49,20 @@ def get_checkout_session(
     if not summary:
         raise EntityNotFoundException("CheckoutSession", checkout_session_id)
     return summary
+
+
+@checkout_router.post(
+    "/checkout/{checkout_session_id}/transition",
+    response_model=CheckoutTransitionResponse,
+    summary="Execute Checkout State Machine Transition",
+    description="Executes a deterministic, server-authoritative state transition on the checkout session after enforcing preconditions and live invariant checks."
+)
+def transition_checkout_session(
+    checkout_session_id: str,
+    request: CheckoutTransitionRequest,
+    db: Session = Depends(get_db_session)
+) -> CheckoutTransitionResponse:
+    return CheckoutStateMachine.transition(db, checkout_session_id, request)
 
 
 @checkout_router.get(

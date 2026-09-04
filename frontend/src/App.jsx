@@ -374,6 +374,38 @@ export default function App() {
     }
   };
 
+  const handleCheckoutTransition = async (action, reason = null) => {
+    if (!checkoutQuote || !checkoutQuote.checkout_session_id) return;
+    setIsQuoteLoading(true);
+    try {
+      const sessionId = checkoutQuote.checkout_session_id;
+      const res = await fetch(`${API_BASE}/api/v1/checkout/${sessionId}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason })
+      });
+      if (res.ok) {
+        const transData = await res.json();
+        setCheckoutQuote(transData.checkout);
+        triggerToast(`🔄 State transition: ${transData.previous_state} → ${transData.current_state}`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = err.error?.message || err.detail || 'State transition failed';
+        triggerToast(`❌ ${msg}`);
+        // Refresh quote to reflect actual state (e.g. EXPIRED or INVALID)
+        const refreshRes = await fetch(`${API_BASE}/api/v1/checkout/${sessionId}`).catch(() => null);
+        if (refreshRes && refreshRes.ok) {
+          setCheckoutQuote(await refreshRes.json());
+        }
+      }
+    } catch (err) {
+      console.error("State transition error:", err);
+      triggerToast("❌ Network error during state transition");
+    } finally {
+      setIsQuoteLoading(false);
+    }
+  };
+
   // Instant Buy / Autonomous Checkout Trigger
   const handleInstantBuy = (product) => {
     const threshold = policy?.single_item_approval_threshold_inr || 50000;
@@ -1375,12 +1407,13 @@ export default function App() {
         isProcessing={isQuoteLoading}
       />
 
-      {/* Checkout Quote Preview Modal (Phase 4 Step 3) */}
+      {/* Checkout Quote & State Machine Modal (Phase 4 Step 4) */}
       <CheckoutQuoteModal
         isOpen={isQuoteModalOpen}
         onClose={() => setIsQuoteModalOpen(false)}
         quote={checkoutQuote}
         onRefreshQuote={handlePrepareCheckoutQuote}
+        onTransition={handleCheckoutTransition}
         isLoading={isQuoteLoading}
       />
 

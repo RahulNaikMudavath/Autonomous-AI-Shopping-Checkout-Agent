@@ -351,7 +351,10 @@ class CheckoutService:
             is_stale = True
             warnings.append("The underlying shopping cart was modified after this quote was created. Please refresh.")
 
-        status_enum = CheckoutSessionStatus.EXPIRED if is_expired else CheckoutSessionStatus(session.status)
+        try:
+            status_enum = CheckoutSessionStatus.EXPIRED if is_expired else CheckoutSessionStatus(session.status)
+        except ValueError:
+            status_enum = CheckoutSessionStatus.PENDING
 
         return CheckoutSummaryResponse(
             checkout_session_id=session.id,
