@@ -14,13 +14,15 @@ from backend.database.session import get_db_session
 from backend.domain.agent_schemas import (
     ShoppingIntent, RecommendationResponse, AgentPlan,
     AgentIntentRequest, AgentIntentResponse,
-    AgentSessionRequest, AgentSessionResponse, ExecutionPlan
+    AgentSessionRequest, AgentSessionResponse, ExecutionPlan,
+    DiscoveryRequest, DiscoveryResult
 )
 from backend.agent.intent_parser import IntentParser
 from backend.agent.workflow_planner import WorkflowPlanner
 from backend.agent.agent_planner import AgentPlanner
 from backend.agent.agent_runner import ShoppingAgentRunner
 from backend.agent.agent_graph import ShoppingAgentGraph
+from backend.agent.discovery_service import DiscoveryService
 
 agent_router = APIRouter(prefix="/agent", tags=["Autonomous Shopping Agent"])
 
@@ -108,3 +110,62 @@ def generate_agent_plan(
     intent: ShoppingIntent
 ) -> AgentPlan:
     return WorkflowPlanner.generate_plan(intent)
+
+
+@agent_router.post(
+    "/discover",
+    response_model=DiscoveryResult,
+    status_code=status.HTTP_200_OK,
+    summary="Multi-Merchant Product Discovery & Normalization",
+    description="Discovers products across Amazon, Flipkart, and Croma, normalizes specifications, enforces merchant isolation, and returns structured canonical products."
+)
+def discover_products(
+    request: DiscoveryRequest,
+    db: Session = Depends(get_db_session)
+) -> DiscoveryResult:
+    # If natural language message or query provided without intent, parse intent first
+    parsed_intent = request.intent
+    if parsed_intent is None and (request.query or request.message):
+        parsed_intent = IntentParser.parse_intent(request.get_search_query())
+
+    return DiscoveryService.discover(
+        db=db,
+        request=request,
+        intent=parsed_intent,
+        merchants=request.merchants,
+        query=request.query or request.message,
+        category=request.category,
+        page=request.page,
+        page_size=request.page_size,
+        in_stock_only=request.in_stock_only
+    )
+
+
+@agent_router.post(
+    "/sessions/{session_id}/discover",
+    response_model=DiscoveryResult,
+    status_code=status.HTTP_200_OK,
+    summary="Session-Scoped Product Discovery",
+    description="Executes federated multi-merchant discovery within an existing agent shopping session."
+)
+def discover_session_products(
+    session_id: str,
+    request: DiscoveryRequest,
+    db: Session = Depends(get_db_session)
+) -> DiscoveryResult:
+    request.session_id = session_id
+    parsed_intent = request.intent
+    if parsed_intent is None and (request.query or request.message):
+        parsed_intent = IntentParser.parse_intent(request.get_search_query())
+
+    return DiscoveryService.discover(
+        db=db,
+        request=request,
+        intent=parsed_intent,
+        merchants=request.merchants,
+        query=request.query or request.message,
+        category=request.category,
+        page=request.page,
+        page_size=request.page_size,
+        in_stock_only=request.in_stock_only
+    )

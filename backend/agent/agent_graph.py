@@ -187,15 +187,17 @@ class ShoppingAgentGraph:
 
         while retries <= state.max_retries and not success:
             try:
-                # Query multi-merchant catalog through typed CatalogTools boundary
-                search_res = CatalogTools.search_multi_merchant_catalog(
+                from backend.agent.discovery_service import DiscoveryService
+                discovery_res = DiscoveryService.discover(
                     db=active_db,
-                    query=state.shopping_intent.query or state.shopping_intent.raw_query,
-                    category=state.shopping_intent.category,
+                    intent=state.shopping_intent,
                     page_size=20
                 )
-                from backend.agent.product_normalizer import ProductNormalizer
-                candidates = [ProductNormalizer.normalize_candidate(c) for c in search_res.items]
+                candidates = discovery_res.products
+                state.metadata["discovery_merchants_attempted"] = discovery_res.merchants_attempted
+                state.metadata["discovery_merchants_succeeded"] = discovery_res.merchants_succeeded
+                state.metadata["discovery_merchants_failed"] = discovery_res.merchants_failed
+                state.metadata["discovery_partial_results"] = discovery_res.partial_results
                 success = True
             except Exception as e:
                 retries += 1
@@ -215,16 +217,23 @@ class ShoppingAgentGraph:
                 if disc_step:
                     disc_step.status = "COMPLETED"
                     disc_step.execution_time_ms = elapsed_ms
+                norm_step = next((s for s in state.execution_plan.steps if s.action == AgentAction.NORMALIZE_PRODUCTS), None)
+                if norm_step:
+                    norm_step.status = "COMPLETED"
+                    norm_step.execution_time_ms = 1
 
             state.trace_steps.append(AgentTraceStep(
                 step_id="step_discovery",
                 title="Federated Multi-Merchant Discovery",
-                agent_name="CatalogTools",
+                agent_name="DiscoveryService",
                 status="completed",
-                summary=f"Discovered {len(candidates)} products across Amazon, Flipkart, and Croma",
+                summary=f"Discovered {len(candidates)} normalized products across {len(discovery_res.merchants_succeeded)} merchants",
                 details={
                     "candidates_count": len(candidates),
-                    "merchants": list(set(c.merchant_code for c in candidates)) if candidates else [],
+                    "canonical_count": len(discovery_res.canonical_products),
+                    "merchants_succeeded": discovery_res.merchants_succeeded,
+                    "merchants_failed": discovery_res.merchants_failed,
+                    "partial_results": discovery_res.partial_results,
                     "retries": retries
                 },
                 execution_time_ms=elapsed_ms
@@ -233,7 +242,7 @@ class ShoppingAgentGraph:
             state.trace_steps.append(AgentTraceStep(
                 step_id="step_discovery",
                 title="Federated Multi-Merchant Discovery",
-                agent_name="CatalogTools",
+                agent_name="DiscoveryService",
                 status="failed",
                 summary=f"Discovery failed: {state.errors[-1] if state.errors else 'Unknown'}",
                 execution_time_ms=elapsed_ms

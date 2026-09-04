@@ -13,7 +13,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import uuid
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from backend.domain.marketplace import AvailabilityState
 
@@ -172,6 +172,7 @@ class NormalizedProductCandidate(BaseModel):
     id: str
     merchant_code: str
     merchant_name: str
+    merchant_id: Optional[str] = None
     product_id: str
     sku: str
     title: str
@@ -193,13 +194,84 @@ class NormalizedProductCandidate(BaseModel):
     delivery_days: int = 3
     shipping_cost: Decimal = Decimal("0.00")
     shipping_option_name: Optional[str] = None
+    shipping_options: List[Dict[str, Any]] = Field(default_factory=list)
     rating: float = 4.5
     review_count: int = 0
     image_url: Optional[str] = None
+    product_url: Optional[str] = None
     
     # Extracted technical specifications
     specs: Dict[str, Any] = Field(default_factory=dict)
+    source_metadata: Dict[str, Any] = Field(default_factory=dict)
     
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @field_validator("current_price", "base_price", mode="before")
+    @classmethod
+    def validate_non_negative_price(cls, v: Any) -> Decimal:
+        if v is None:
+            raise ValueError("Price cannot be None")
+        d = Decimal(str(v))
+        if d < Decimal("0.00"):
+            raise ValueError(f"Price cannot be negative: {d}")
+        return d
+
+
+class MerchantOffer(BaseModel):
+    """
+    Merchant offer capturing price, inventory, logistics, and rating for a specific seller.
+    """
+    merchant_code: str
+    merchant_name: str
+    merchant_id: Optional[str] = None
+    product_id: str
+    sku: str
+    current_price: Decimal
+    base_price: Decimal
+    currency: str = "INR"
+    discount_percentage: float = 0.0
+    inventory_state: AvailabilityState = AvailabilityState.IN_STOCK
+    available_quantity: int = 0
+    in_stock: bool = True
+    delivery_days: int = 3
+    shipping_cost: Decimal = Decimal("0.00")
+    shipping_option_name: Optional[str] = None
+    shipping_options: List[Dict[str, Any]] = Field(default_factory=list)
+    rating: float = 4.5
+    review_count: int = 0
+    product_url: Optional[str] = None
+    image_url: Optional[str] = None
+    specs: Dict[str, Any] = Field(default_factory=dict)
+    source_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @field_validator("current_price", "base_price", mode="before")
+    @classmethod
+    def validate_non_negative_price(cls, v: Any) -> Decimal:
+        if v is None:
+            raise ValueError("Price cannot be None")
+        d = Decimal(str(v))
+        if d < Decimal("0.00"):
+            raise ValueError(f"Price cannot be negative: {d}")
+        return d
+
+
+class CanonicalProduct(BaseModel):
+    """
+    Canonical product representation grouping multiple merchant offers for the same underlying product model.
+    """
+    canonical_id: str
+    title: str
+    brand: str
+    category: str
+    model: Optional[str] = None
+    description: Optional[str] = None
+    normalized_specs: Dict[str, Any] = Field(default_factory=dict)
+    offers: List[MerchantOffer] = Field(default_factory=list)
+    best_price_offer: Optional[MerchantOffer] = None
+    fastest_delivery_offer: Optional[MerchantOffer] = None
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
@@ -370,3 +442,49 @@ class RecommendationResponse(BaseModel):
     trace: List[AgentTraceStep] = Field(default_factory=list)
     requires_human_authorization: bool = True
     authorization_reason: str = "Review top recommendation and confirm merchant checkout."
+
+
+class MerchantDiscoveryStatus(BaseModel):
+    merchant: str
+    status: str  # "SUCCESS", "FAILED", "TIMEOUT", "SKIPPED"
+    result_count: int = 0
+    error: Optional[str] = None
+    latency_ms: int = 0
+
+
+class DiscoveryRequest(BaseModel):
+    intent: Optional[ShoppingIntent] = None
+    query: Optional[str] = None
+    message: Optional[str] = None
+    category: Optional[str] = None
+    merchants: Optional[List[str]] = None
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=50, ge=1, le=100)
+    in_stock_only: bool = False
+    session_id: Optional[str] = None
+    user_id: str = "default_user"
+
+    def get_search_query(self) -> str:
+        if self.intent and (self.intent.query or self.intent.raw_query):
+            return self.intent.query or self.intent.raw_query
+        text = self.query or self.message
+        if text and text.strip():
+            return text.strip()
+        if self.category:
+            return self.category.strip()
+        return "laptops"
+
+
+class DiscoveryResult(BaseModel):
+    products: List[NormalizedProductCandidate] = Field(default_factory=list)
+    canonical_products: List[CanonicalProduct] = Field(default_factory=list)
+    merchants_attempted: List[str] = Field(default_factory=list)
+    merchants_succeeded: List[str] = Field(default_factory=list)
+    merchants_failed: List[Dict[str, Any]] = Field(default_factory=list)
+    merchant_statuses: List[MerchantDiscoveryStatus] = Field(default_factory=list)
+    total_results: int = 0
+    partial_results: bool = False
+    errors: List[str] = Field(default_factory=list)
+    execution_time_ms: int = 0
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
