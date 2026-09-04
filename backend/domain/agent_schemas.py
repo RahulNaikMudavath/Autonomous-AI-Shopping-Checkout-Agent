@@ -598,3 +598,108 @@ class DiscoveryResult(BaseModel):
     execution_time_ms: int = 0
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class ComparisonItem(BaseModel):
+    """
+    Structured side-by-side comparison item derived strictly from normalized candidate data.
+    """
+    candidate_id: str
+    product_id: str
+    title: str
+    merchant: str
+    merchant_code: str
+    price: Decimal
+    discount_pct: float = 0.0
+    rating: float = 4.5
+    review_count: int = 0
+    delivery_days: Optional[int] = None
+    in_stock: bool = True
+    key_specs: Dict[str, Any] = Field(default_factory=dict)
+    overall_score: float = 0.0
+    value_score: float = 0.0
+    badge: Optional[str] = None
+    reasons: List[str] = Field(default_factory=list)
+    image_url: Optional[str] = None
+    product_url: Optional[str] = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def validate_price(cls, v: Any) -> Decimal:
+        if v is None:
+            return Decimal("0.00")
+        return Decimal(str(v))
+
+
+class RecommendationResult(BaseModel):
+    """
+    Explainable recommendation payload containing top deterministic picks, alternatives,
+    factual justification reasons, rejection audit, and merchant discovery coverage.
+    """
+    best_overall: Optional[RankedProductCandidate] = None
+    best_value: Optional[RankedProductCandidate] = None
+    fastest_delivery: Optional[RankedProductCandidate] = None
+    alternatives: List[RankedProductCandidate] = Field(default_factory=list)
+    comparison_matrix: List[ComparisonItem] = Field(default_factory=list)
+    comparison: List[ComparisonItem] = Field(default_factory=list)
+    reasons: Dict[str, List[str]] = Field(default_factory=dict)
+    rejection_summary: Dict[str, int] = Field(default_factory=dict)
+    merchant_coverage: List[MerchantDiscoveryStatus] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    data_completeness: str = "COMPLETE"  # "COMPLETE", "PARTIAL", "EMPTY"
+    requires_human_authorization: bool = True
+    authorization_prompt: str = "Review recommendation and explicitly authorize merchant checkout."
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.comparison and self.comparison_matrix:
+            self.comparison = self.comparison_matrix
+        elif not self.comparison_matrix and self.comparison:
+            self.comparison_matrix = self.comparison
+
+
+class ShoppingAgentRequest(BaseModel):
+    """
+    Primary API request model for the autonomous shopping agent.
+    """
+    message: Optional[str] = Field(default=None, description="Natural language shopping request")
+    query: Optional[str] = Field(default=None, description="Alias for message")
+    session_id: Optional[str] = Field(default=None, description="Optional active session ID")
+    user_id: str = Field(default="default_user", description="User identity")
+    scoring_profile: str = Field(default="default_v1", description="Objective scoring weight profile")
+
+    def get_query_text(self) -> str:
+        text = self.message or self.query
+        if not text or not text.strip():
+            raise ValueError("Message or query must be provided and non-empty.")
+        return text.strip()
+
+
+class ShoppingAgentResult(BaseModel):
+    """
+    Primary strongly-typed end-to-end shopping agent response.
+    Encapsulates intent, plan, discovery, constraints, ranking, and explainable recommendation.
+    """
+    session_id: str
+    status: str  # "COMPLETED", "NO_MATCH", "NEEDS_CLARIFICATION", "PARTIAL_RESULTS", "FAILED"
+    query: str
+    intent: Optional[ShoppingIntent] = None
+    execution_plan: Optional[ExecutionPlan] = None
+    discovery_summary: Dict[str, Any] = Field(default_factory=dict)
+    constraint_summary: Dict[str, Any] = Field(default_factory=dict)
+    ranking_summary: Dict[str, Any] = Field(default_factory=dict)
+    recommendation: Optional[RecommendationResult] = None
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+    clarification_prompt: Optional[str] = None
+    suggested_action: Optional[str] = None
+    execution_metadata: Dict[str, Any] = Field(default_factory=dict)
+    trace: List[AgentTraceStep] = Field(default_factory=list)
+    requires_human_authorization: bool = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+

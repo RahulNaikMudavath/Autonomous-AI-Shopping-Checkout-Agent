@@ -17,13 +17,14 @@ from backend.domain.agent_schemas import (
     AgentSessionRequest, AgentSessionResponse, ExecutionPlan,
     DiscoveryRequest, DiscoveryResult,
     ConstraintFilterRequest, ConstraintFilterResult,
-    RankingRequest, RankingResult
+    RankingRequest, RankingResult,
+    ShoppingAgentRequest, ShoppingAgentResult, RecommendationResult
 )
 from backend.agent.intent_parser import IntentParser
 from backend.agent.workflow_planner import WorkflowPlanner
 from backend.agent.agent_planner import AgentPlanner
 from backend.agent.agent_runner import ShoppingAgentRunner
-from backend.agent.agent_graph import ShoppingAgentGraph
+from backend.agent.agent_graph import ShoppingAgentGraph, run_shopping_agent
 from backend.agent.discovery_service import DiscoveryService
 from backend.agent.constraint_engine import ConstraintEngine
 from backend.agent.ranking_engine import RankingEngine
@@ -35,6 +36,50 @@ class AgentQueryRequest(BaseModel):
     query: str = Field(..., min_length=2, description="Natural language shopping request")
     session_id: Optional[str] = Field(default=None, description="Optional active shopping session ID")
     user_id: str = Field(default="default_user", description="User identity")
+
+
+@agent_router.post(
+    "/shopping",
+    response_model=ShoppingAgentResult,
+    status_code=status.HTTP_200_OK,
+    summary="End-to-End Autonomous Shopping Agent Workflow",
+    description="Primary Step 7 entry point executing natural language extraction, multi-merchant federated discovery, deterministic hard constraints, MCDA ranking, and explainable recommendations."
+)
+def execute_shopping_agent(
+    request: ShoppingAgentRequest,
+    db: Session = Depends(get_db_session)
+) -> ShoppingAgentResult:
+    query_text = request.get_query_text()
+    return ShoppingAgentGraph.run_shopping_agent(
+        user_message=query_text,
+        db=db,
+        session_id=request.session_id,
+        user_id=request.user_id,
+        scoring_profile=request.scoring_profile
+    )
+
+
+@agent_router.post(
+    "/sessions/{session_id}/shopping",
+    response_model=ShoppingAgentResult,
+    status_code=status.HTTP_200_OK,
+    summary="Session-Scoped End-to-End Shopping Agent Workflow",
+    description="Executes the full shopping agent pipeline within an existing session context."
+)
+def execute_session_shopping_agent(
+    session_id: str,
+    request: ShoppingAgentRequest,
+    db: Session = Depends(get_db_session)
+) -> ShoppingAgentResult:
+    query_text = request.get_query_text()
+    return ShoppingAgentGraph.run_shopping_agent(
+        user_message=query_text,
+        db=db,
+        session_id=session_id,
+        user_id=request.user_id,
+        scoring_profile=request.scoring_profile
+    )
+
 
 
 @agent_router.post(

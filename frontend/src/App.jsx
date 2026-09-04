@@ -107,54 +107,108 @@ export default function App() {
     setActiveTab('search');
 
     try {
-      // Primary: Phase 3 Autonomous Shopping Agent
-      let res = await fetch(`${API_BASE}/api/v1/agent/query`, {
+      // Primary: Phase 3 Step 7 End-to-End Shopping Agent
+      let res = await fetch(`${API_BASE}/api/v1/agent/shopping`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: queryText, user_id: "default_user" })
       }).catch(() => null);
 
       if (res && res.ok) {
-        const rawData = await res.json();
-        const topCandidate = rawData.top_recommendation ? {
-          ...rawData.top_recommendation.candidate,
-          badge: rawData.top_recommendation.badge,
-          reasons: rawData.top_recommendation.reasons,
-          tradeoffs: rawData.top_recommendation.tradeoffs,
-          price_inr: Number(rawData.top_recommendation.candidate.current_price),
-          value_score: rawData.top_recommendation.mcda_score?.composite_score || 9.5
-        } : null;
+        const agentResult = await res.json();
+        const rec = agentResult.recommendation;
+        
+        const formatCandidate = (rankedItem) => {
+          if (!rankedItem || !rankedItem.candidate) return null;
+          return {
+            ...rankedItem.candidate,
+            badge: rankedItem.badge,
+            reasons: rankedItem.score_explanation || [],
+            price_inr: Number(rankedItem.candidate.current_price),
+            value_score: rankedItem.overall_score
+          };
+        };
 
-        const comparisonList = (rawData.all_recommendations || []).map(item => ({
-          ...item.candidate,
+        const topPick = formatCandidate(rec?.best_overall);
+        const bestValue = formatCandidate(rec?.best_value);
+        const fastestDelivery = formatCandidate(rec?.fastest_delivery);
+        const alternativesList = (rec?.alternatives || []).map(formatCandidate).filter(Boolean);
+
+        const comparisonList = (rec?.comparison_matrix || rec?.comparison || []).map(item => ({
+          id: item.candidate_id || item.product_id,
+          title: item.title,
+          merchant_name: item.merchant,
+          merchant_code: item.merchant_code,
+          price_inr: Number(item.price),
+          discount_percentage: item.discount_pct,
+          rating: item.rating,
+          review_count: item.review_count,
+          delivery_days: item.delivery_days,
+          in_stock: item.in_stock,
+          specs: item.key_specs,
+          value_score: item.overall_score,
           badge: item.badge,
-          reasons: item.reasons,
-          tradeoffs: item.tradeoffs,
-          price_inr: Number(item.candidate.current_price),
-          value_score: item.mcda_score?.composite_score || 8.0
+          reasons: item.reasons
         }));
 
         setRecommendation({
-          ...rawData,
-          top_recommendation: topCandidate,
+          agent_result: agentResult,
+          status: agentResult.status,
+          intent: agentResult.intent,
+          warnings: agentResult.warnings || [],
+          clarification_prompt: agentResult.clarification_prompt,
+          suggested_action: agentResult.suggested_action,
+          rejection_summary: rec?.rejection_summary || {},
+          merchant_coverage: rec?.merchant_coverage || [],
+          data_completeness: rec?.data_completeness || 'COMPLETE',
+          top_recommendation: topPick,
+          best_value_recommendation: bestValue,
+          fastest_delivery_recommendation: fastestDelivery,
+          alternatives: alternativesList,
           comparison_table: comparisonList,
-          explanation: rawData.top_recommendation?.reasons?.join(" • ") || "MCDA highest ranked match",
-          trade_off_analysis: rawData.top_recommendation?.tradeoffs?.join(" • ") || "Optimal price-performance balance"
+          explanation: rec?.reasons?.best_overall?.join(" • ") || "Deterministic MCDA highest ranked match",
+          trade_off_analysis: topPick ? `Top score ${topPick.value_score?.toFixed(1)}/100 across specifications and value` : "",
+          trace: agentResult.trace || []
         });
         fetchInitialData();
       } else {
-        // Fallback to /api/chat if legacy endpoint
-        const fallbackRes = await fetch(`${API_BASE}/api/chat`, {
+        // Fallback to /api/v1/agent/query
+        let queryRes = await fetch(`${API_BASE}/api/v1/agent/query`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: queryText, session_id: "session_default" })
-        });
-        if (fallbackRes.ok) {
-          const data = await fallbackRes.json();
-          setRecommendation(data);
+          body: JSON.stringify({ query: queryText, user_id: "default_user" })
+        }).catch(() => null);
+
+        if (queryRes && queryRes.ok) {
+          const rawData = await queryRes.json();
+          const topCandidate = rawData.top_recommendation ? {
+            ...rawData.top_recommendation.candidate,
+            badge: rawData.top_recommendation.badge,
+            reasons: rawData.top_recommendation.reasons,
+            tradeoffs: rawData.top_recommendation.tradeoffs,
+            price_inr: Number(rawData.top_recommendation.candidate.current_price),
+            value_score: rawData.top_recommendation.mcda_score?.composite_score || 9.5
+          } : null;
+
+          const comparisonList = (rawData.all_recommendations || []).map(item => ({
+            ...item.candidate,
+            badge: item.badge,
+            reasons: item.reasons,
+            tradeoffs: item.tradeoffs,
+            price_inr: Number(item.candidate.current_price),
+            value_score: item.mcda_score?.composite_score || 8.0
+          }));
+
+          setRecommendation({
+            ...rawData,
+            top_recommendation: topCandidate,
+            comparison_table: comparisonList,
+            explanation: rawData.top_recommendation?.reasons?.join(" • ") || "MCDA highest ranked match",
+            trade_off_analysis: rawData.top_recommendation?.tradeoffs?.join(" • ") || "Optimal price-performance balance"
+          });
           fetchInitialData();
         } else {
-          const err = await (res?.json() || fallbackRes.json()).catch(() => ({}));
+          const err = await (res?.json() || queryRes?.json()).catch(() => ({}));
           alert(`Search error: ${err.detail || "Failed to process shopping request"}`);
         }
       }
@@ -952,7 +1006,7 @@ export default function App() {
                 <div className="space-y-1">
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">Autonomous Agents at Work</h3>
                   <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Extracting structured intent, querying merchant APIs across Amazon, Flipkart &amp; Croma, and computing value trade-offs...
+                    Extracting structured intent, querying merchant APIs across Amazon, Flipkart &amp; Croma, applying hard constraints, and scoring trade-offs...
                   </p>
                 </div>
               </div>
@@ -961,16 +1015,112 @@ export default function App() {
             {!isLoading && recommendation && (
               <div className="space-y-8">
                 {/* Agent Trace Timeline */}
-                {recommendation.trace && (
+                {recommendation.trace && recommendation.trace.length > 0 && (
                   <AgentTraceTimeline trace={recommendation.trace} />
+                )}
+
+                {/* Warnings Banner */}
+                {recommendation.warnings && recommendation.warnings.length > 0 && (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1.5 shadow-xs">
+                    <div className="flex items-center gap-2 font-bold text-amber-400">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>Execution Notice</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-0.5 text-amber-200/90 pl-1 text-[11px]">
+                      {recommendation.warnings.map((w, idx) => (
+                        <li key={idx}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Merchant Discovery Coverage Badges */}
+                {recommendation.merchant_coverage && recommendation.merchant_coverage.length > 0 && (
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+                      <Store className="w-4 h-4 text-indigo-500" />
+                      <span>Merchant Discovery Coverage:</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {recommendation.merchant_coverage.map((m, idx) => (
+                        <span 
+                          key={idx}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                            m.status === 'SUCCESS' 
+                              ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                              : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-500/30'
+                          }`}
+                        >
+                          {m.status === 'SUCCESS' ? <Check className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                          <span>{m.merchant}: {m.result_count} items ({m.status})</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clarification Needed State */}
+                {recommendation.status === 'NEEDS_CLARIFICATION' && (
+                  <div className="p-6 rounded-3xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-500/30 space-y-3">
+                    <div className="flex items-center gap-2.5 text-indigo-700 dark:text-indigo-300 font-bold text-sm">
+                      <HelpCircle className="w-5 h-5" />
+                      <span>Clarification Needed to Find Best Deals</span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                      {recommendation.clarification_prompt || "Please provide your maximum budget and specific requirements to help us search across retailers."}
+                    </p>
+                    {recommendation.suggested_action && (
+                      <div className="text-[11px] text-indigo-500 dark:text-indigo-400 font-medium">
+                        💡 Tip: {recommendation.suggested_action}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* No Match State */}
+                {recommendation.status === 'NO_MATCH' && (
+                  <div className="p-6 rounded-3xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-500/30 space-y-4">
+                    <div className="flex items-center gap-2.5 text-amber-700 dark:text-amber-300 font-bold text-sm">
+                      <AlertTriangle className="w-5 h-5 text-amber-500" />
+                      <span>No Exact Matches Found Under Current Hard Constraints</span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                      Our deterministic constraint engine evaluated all discovered products, but zero candidates satisfied 100% of your non-negotiable criteria without violation.
+                    </p>
+
+                    {/* Rejection Summary */}
+                    {recommendation.rejection_summary && Object.keys(recommendation.rejection_summary).length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-amber-200 dark:border-amber-500/20">
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Candidate Rejection Audit:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(recommendation.rejection_summary).map(([reason, count]) => (
+                            <span key={reason} className="px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-900 border border-amber-300 dark:border-amber-500/30 text-xs text-slate-700 dark:text-slate-300">
+                              <strong>{reason.replace(/_/g, ' ')}:</strong> {count} candidate{count > 1 ? 's' : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {recommendation.suggested_action && (
+                      <div className="text-xs text-amber-800 dark:text-amber-300 font-semibold">
+                        💡 Suggestion: {recommendation.suggested_action}
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Top Recommendation Product */}
                 {recommendation.top_recommendation && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-indigo-500" />
-                      <h2 className="text-lg font-bold text-slate-900 dark:text-white">Top Recommended Match</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-indigo-500" />
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">🏆 Best Overall AI Recommendation</h2>
+                      </div>
+                      <span className="badge badge-indigo text-xs">
+                        Deterministic Pick #{recommendation.top_recommendation.rank || 1}
+                      </span>
                     </div>
 
                     <ProductCard
@@ -985,12 +1135,68 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Spotlight Picks: Best Value & Fastest Delivery */}
+                {(recommendation.best_value_recommendation || recommendation.fastest_delivery_recommendation) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {recommendation.best_value_recommendation && recommendation.best_value_recommendation.id !== recommendation.top_recommendation?.id && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>💰</span>
+                          <span>Best Value Pick</span>
+                        </div>
+                        <ProductCard
+                          product={{ ...recommendation.best_value_recommendation, badge: 'BEST_VALUE' }}
+                          onAddToCart={() => handleAddToCart(recommendation.best_value_recommendation)}
+                          onInstantBuy={() => handleInstantBuy(recommendation.best_value_recommendation)}
+                          isTopPick={false}
+                        />
+                      </div>
+                    )}
+
+                    {recommendation.fastest_delivery_recommendation && recommendation.fastest_delivery_recommendation.id !== recommendation.top_recommendation?.id && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>⚡</span>
+                          <span>Fastest Delivery Pick</span>
+                        </div>
+                        <ProductCard
+                          product={{ ...recommendation.fastest_delivery_recommendation, badge: 'FASTEST_DELIVERY' }}
+                          onAddToCart={() => handleAddToCart(recommendation.fastest_delivery_recommendation)}
+                          onInstantBuy={() => handleInstantBuy(recommendation.fastest_delivery_recommendation)}
+                          isTopPick={false}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Why Other Products Were Filtered Out (Rejection Audit) */}
+                {recommendation.rejection_summary && Object.keys(recommendation.rejection_summary).length > 0 && recommendation.top_recommendation && (
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-white/10 space-y-2 shadow-xs">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Scale className="w-4 h-4 text-indigo-500" />
+                      <span>Why other products were rejected:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {Object.entries(recommendation.rejection_summary).map(([reason, count]) => (
+                        <span key={reason} className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
+                          <strong>{reason.replace(/_/g, ' ')}:</strong> {count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Multi-Merchant Comparison Matrix */}
                 {recommendation.comparison_table?.length > 0 && (
                   <ComparisonMatrix 
                     products={recommendation.comparison_table}
+                    topProduct={recommendation.top_recommendation}
+                    explanation={recommendation.explanation}
+                    tradeOffAnalysis={recommendation.trade_off_analysis}
                     onAddToCart={handleAddToCart}
                     onInstantBuy={handleInstantBuy}
+                    onSelectProduct={handleInstantBuy}
                   />
                 )}
               </div>
