@@ -87,6 +87,37 @@ def init_db(engine: Engine | None = None) -> Engine:
                     conn.execute(text("ALTER TABLE checkout_sessions ADD COLUMN updated_at DATETIME;"))
     except Exception as e:
         logger.warning("Database schema column migration check: %s", str(e))
+
+    try:
+        with Session(target_engine) as session:
+            from backend.database.models import PurchasePolicyModel
+            from decimal import Decimal
+            default_pol = session.query(PurchasePolicyModel).filter(PurchasePolicyModel.policy_scope == "GLOBAL").first()
+            if not default_pol:
+                default_pol = PurchasePolicyModel(
+                    name="Default Spending & Safety Policy",
+                    policy_scope="GLOBAL",
+                    scope_id=None,
+                    version=1,
+                    is_active=True,
+                    max_purchase_amount=Decimal("100000.00"),
+                    auto_approval_limit=Decimal("25000.00"),
+                    allowed_merchants=[],
+                    blocked_merchants=[],
+                    allowed_categories=[],
+                    blocked_categories=["WEAPONS", "TOBACCO", "HAZARDOUS", "ILLEGAL_GOODS"],
+                    blocked_product_ids=[],
+                    blocked_skus=[],
+                    max_quantity_per_product=10,
+                    max_total_quantity=25,
+                    max_shipping_cost=Decimal("500.00"),
+                    allowed_shipping_types=[],
+                    blocked_shipping_types=[]
+                )
+                session.add(default_pol)
+                session.commit()
+    except Exception as e:
+        logger.warning("Default policy initialization check: %s", str(e))
         
     logger.info("AgentCart database tables verified/created successfully.")
     return target_engine

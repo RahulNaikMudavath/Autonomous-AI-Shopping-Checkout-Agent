@@ -5,7 +5,7 @@ Defines strictly typed request, response, and transfer models with Decimal finan
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -475,3 +475,61 @@ class OrderTrackingResponse(BaseModel):
     estimated_delivery: Optional[str] = None
     status_timeline: List[Dict[str, Any]] = Field(default_factory=list)
     shipping_address: str
+
+
+# =====================================================================
+# Phase 5 Step 1: Purchase Policy Schemas
+# =====================================================================
+
+class PolicyDecisionType(str, Enum):
+    ALLOW = "ALLOW"
+    REQUIRE_AUTHORIZATION = "REQUIRE_AUTHORIZATION"
+    DENY = "DENY"
+
+
+class PurchasePolicyDetail(BaseModel):
+    id: str
+    name: str = "Default Spending & Safety Policy"
+    policy_scope: str = "GLOBAL"  # "GLOBAL", "USER", "SESSION"
+    scope_id: Optional[str] = None
+    version: int = 1
+    is_active: bool = True
+    max_purchase_amount: Decimal = Decimal("100000.00")
+    auto_approval_limit: Decimal = Decimal("25000.00")
+    allowed_merchants: List[str] = Field(default_factory=list)
+    blocked_merchants: List[str] = Field(default_factory=list)
+    allowed_categories: List[str] = Field(default_factory=list)
+    blocked_categories: List[str] = Field(default_factory=lambda: ["WEAPONS", "TOBACCO", "HAZARDOUS", "ILLEGAL_GOODS"])
+    blocked_product_ids: List[str] = Field(default_factory=list)
+    blocked_skus: List[str] = Field(default_factory=list)
+    max_quantity_per_product: int = 10
+    max_total_quantity: int = 25
+    max_shipping_cost: Optional[Decimal] = Decimal("500.00")
+    allowed_shipping_types: List[str] = Field(default_factory=list)
+    blocked_shipping_types: List[str] = Field(default_factory=list)
+    created_at: Optional[Union[datetime, str]] = None
+    updated_at: Optional[Union[datetime, str]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EvaluatePolicyRequest(BaseModel):
+    quote_id: str = Field(..., description="Authoritative checkout quote / session ID to evaluate")
+    session_id: Optional[str] = Field(default=None, description="Optional user session ID for horizontal ownership checks")
+    policy_id: Optional[str] = Field(default=None, description="Optional specific policy ID to evaluate against")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PolicyEvaluationResponse(BaseModel):
+    decision: PolicyDecisionType
+    reason_codes: List[str] = Field(default_factory=list)
+    human_explanation: str
+    evaluated_rules: List[str] = Field(default_factory=list)
+    policy_id: str
+    policy_version: int
+    quote_id: str
+    grand_total: Decimal
+    evaluated_at: str
+
+    model_config = ConfigDict(extra="forbid")

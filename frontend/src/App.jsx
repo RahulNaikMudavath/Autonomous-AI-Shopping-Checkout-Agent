@@ -61,6 +61,7 @@ export default function App() {
   const [selectedHitlProduct, setSelectedHitlProduct] = useState(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutQuote, setCheckoutQuote] = useState(null);
+  const [policyDecision, setPolicyDecision] = useState(null);
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [successToast, setSuccessToast] = useState(null);
@@ -364,6 +365,7 @@ export default function App() {
         setCheckoutQuote(quoteData);
         setIsCartOpen(false);
         setIsQuoteModalOpen(true);
+        evaluatePolicyForQuote(quoteData.checkout_session_id || quoteData.quote_id, sessionId);
         if (quoteData.price_changed) {
           triggerToast("⚠️ Live price change detected — checkout quote updated.");
         } else {
@@ -378,6 +380,29 @@ export default function App() {
       triggerToast("❌ Network error connecting to checkout quote service");
     } finally {
       setIsQuoteLoading(false);
+    }
+  };
+
+  const evaluatePolicyForQuote = async (quoteId, sessId) => {
+    if (!quoteId) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/policy/evaluate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessId || 'default_user_session'
+        },
+        body: JSON.stringify({
+          quote_id: quoteId,
+          session_id: sessId || 'default_user_session'
+        })
+      });
+      if (res.ok) {
+        const polData = await res.json();
+        setPolicyDecision(polData);
+      }
+    } catch (err) {
+      console.warn("Policy evaluation fetch error:", err);
     }
   };
 
@@ -400,6 +425,7 @@ export default function App() {
       if (res.ok) {
         const transData = await res.json();
         setCheckoutQuote(transData.checkout);
+        evaluatePolicyForQuote(transData.checkout_session_id || transData.checkout.checkout_session_id, callerSession);
         triggerToast(`🔄 State transition: ${transData.previous_state} → ${transData.current_state}`);
       } else {
         const err = await res.json().catch(() => ({}));
@@ -410,7 +436,9 @@ export default function App() {
           headers: { 'X-Session-ID': callerSession }
         }).catch(() => null);
         if (refreshRes && refreshRes.ok) {
-          setCheckoutQuote(await refreshRes.json());
+          const freshQuote = await refreshRes.json();
+          setCheckoutQuote(freshQuote);
+          evaluatePolicyForQuote(freshQuote.checkout_session_id, callerSession);
         }
       }
     } catch (err) {
@@ -1422,11 +1450,12 @@ export default function App() {
         isProcessing={isQuoteLoading}
       />
 
-      {/* Checkout Quote & State Machine Modal (Phase 4 Step 4) */}
+      {/* Checkout Quote & State Machine Modal (Phase 4 Step 4 / Phase 5 Step 1) */}
       <CheckoutQuoteModal
         isOpen={isQuoteModalOpen}
         onClose={() => setIsQuoteModalOpen(false)}
         quote={checkoutQuote}
+        policyDecision={policyDecision}
         onRefreshQuote={handlePrepareCheckoutQuote}
         onTransition={handleCheckoutTransition}
         isLoading={isQuoteLoading}

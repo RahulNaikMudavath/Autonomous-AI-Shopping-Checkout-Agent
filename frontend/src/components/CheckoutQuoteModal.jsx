@@ -8,6 +8,7 @@ export default function CheckoutQuoteModal({
   isOpen,
   onClose,
   quote,
+  policyDecision,
   onRefreshQuote,
   onTransition,
   isLoading = false
@@ -51,6 +52,36 @@ export default function CheckoutQuoteModal({
         return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
     }
   };
+
+  const getPolicyBadge = (dec) => {
+    switch (dec) {
+      case 'ALLOW':
+        return {
+          bg: 'bg-emerald-950/50 border-emerald-500/50 text-emerald-300',
+          badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+          title: 'Allowed by Purchase Policy',
+          icon: ShieldCheck
+        };
+      case 'REQUIRE_AUTHORIZATION':
+        return {
+          bg: 'bg-amber-950/50 border-amber-500/50 text-amber-300',
+          badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+          title: 'Requires Human Authorization',
+          icon: Sparkles
+        };
+      case 'DENY':
+      default:
+        return {
+          bg: 'bg-rose-950/50 border-rose-500/50 text-rose-300',
+          badge: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+          title: 'Blocked by Purchase Policy',
+          icon: XCircle
+        };
+    }
+  };
+
+  const policyMeta = policyDecision ? getPolicyBadge(policyDecision.decision) : null;
+  const PolicyIcon = policyMeta ? policyMeta.icon : ShieldCheck;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
@@ -125,6 +156,36 @@ export default function CheckoutQuoteModal({
             <span>{isTerminal ? 'Session Terminated' : '15-Minute Bounded Window'}</span>
           </div>
         </div>
+
+        {/* Phase 5 Step 1: Deterministic Purchase Policy Engine Evaluation Card */}
+        {policyDecision && policyMeta && (
+          <div className={`p-4 rounded-xl border ${policyMeta.bg} space-y-2`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-xs">
+                <PolicyIcon className="w-4 h-4 shrink-0" />
+                <span>Purchase Policy Evaluation</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${policyMeta.badge}`}>
+                {policyDecision.decision}
+              </span>
+            </div>
+            <p className="text-xs text-slate-200/90 leading-relaxed pl-6">
+              {policyDecision.human_explanation}
+            </p>
+            {policyDecision.reason_codes && policyDecision.reason_codes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pl-6 pt-1">
+                {policyDecision.reason_codes.map((rc, idx) => (
+                  <span key={idx} className="px-1.5 py-0.5 rounded bg-black/40 text-[10px] font-mono text-slate-300 border border-white/10">
+                    {rc}
+                  </span>
+                ))}
+                <span className="text-[10px] text-slate-400 font-mono self-center ml-auto">
+                  Policy v{policyDecision.policy_version}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Warnings / Live Price / Staleness Notices */}
         {(priceChanged || isStale || warnings.length > 0) && (

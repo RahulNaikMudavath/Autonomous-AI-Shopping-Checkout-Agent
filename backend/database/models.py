@@ -696,3 +696,104 @@ class OrderItemModel(Base):
             "total_price": float(self.total_price) if self.total_price is not None else 0.0
         }
 
+
+# =====================================================================
+# Phase 5: Autonomous Policy & Spending Guardrails Models
+# =====================================================================
+
+class PurchasePolicyModel(Base):
+    """
+    Durable PostgreSQL storage for autonomous purchase policies, spending limits,
+    category restrictions, and merchant allowlists/blocklists.
+    """
+    __tablename__ = "purchase_policies"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
+    name = Column(String(128), default="Default Spending & Safety Policy", nullable=False)
+    policy_scope = Column(String(64), default="GLOBAL", nullable=False, index=True)  # "GLOBAL", "USER", "SESSION"
+    scope_id = Column(String(64), nullable=True, index=True)
+    version = Column(Integer, default=1, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    max_purchase_amount = Column(Numeric(12, 2), default=Decimal("100000.00"), nullable=False)
+    auto_approval_limit = Column(Numeric(12, 2), default=Decimal("25000.00"), nullable=False)
+    allowed_merchants = Column(JSON, default=list, nullable=False)
+    blocked_merchants = Column(JSON, default=list, nullable=False)
+    allowed_categories = Column(JSON, default=list, nullable=False)
+    blocked_categories = Column(JSON, default=lambda: ["WEAPONS", "TOBACCO", "HAZARDOUS", "ILLEGAL_GOODS"], nullable=False)
+    blocked_product_ids = Column(JSON, default=list, nullable=False)
+    blocked_skus = Column(JSON, default=list, nullable=False)
+    max_quantity_per_product = Column(Integer, default=10, nullable=False)
+    max_total_quantity = Column(Integer, default=25, nullable=False)
+    max_shipping_cost = Column(Numeric(12, 2), default=Decimal("500.00"), nullable=True)
+    allowed_shipping_types = Column(JSON, default=list, nullable=False)
+    blocked_shipping_types = Column(JSON, default=list, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    # Relationships
+    evaluations = relationship("PolicyEvaluationRecordModel", back_populates="policy", cascade="all, delete-orphan")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "policy_scope": self.policy_scope,
+            "scope_id": self.scope_id,
+            "version": self.version,
+            "is_active": self.is_active,
+            "max_purchase_amount": float(self.max_purchase_amount) if self.max_purchase_amount is not None else 0.0,
+            "auto_approval_limit": float(self.auto_approval_limit) if self.auto_approval_limit is not None else 0.0,
+            "allowed_merchants": self.allowed_merchants or [],
+            "blocked_merchants": self.blocked_merchants or [],
+            "allowed_categories": self.allowed_categories or [],
+            "blocked_categories": self.blocked_categories or [],
+            "blocked_product_ids": self.blocked_product_ids or [],
+            "blocked_skus": self.blocked_skus or [],
+            "max_quantity_per_product": self.max_quantity_per_product,
+            "max_total_quantity": self.max_total_quantity,
+            "max_shipping_cost": float(self.max_shipping_cost) if self.max_shipping_cost is not None else None,
+            "allowed_shipping_types": self.allowed_shipping_types or [],
+            "blocked_shipping_types": self.blocked_shipping_types or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class PolicyEvaluationRecordModel(Base):
+    """
+    Immutable audit ledger record of deterministic policy evaluations.
+    Persists decision, reason codes, evaluated rules, and policy snapshot.
+    """
+    __tablename__ = "policy_evaluation_records"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
+    quote_id = Column(String(64), ForeignKey("checkout_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_id = Column(String(64), ForeignKey("purchase_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_version = Column(Integer, nullable=False)
+    session_id = Column(String(64), nullable=True, index=True)
+    decision = Column(String(32), nullable=False, index=True)  # "ALLOW", "REQUIRE_AUTHORIZATION", "DENY"
+    reason_codes = Column(JSON, default=list, nullable=False)
+    evaluated_rules = Column(JSON, default=list, nullable=False)
+    grand_total = Column(Numeric(12, 2), nullable=False)
+    policy_snapshot = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    # Relationships
+    policy = relationship("PurchasePolicyModel", back_populates="evaluations")
+    checkout_session = relationship("CheckoutSessionModel")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "quote_id": self.quote_id,
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+            "session_id": self.session_id,
+            "decision": self.decision,
+            "reason_codes": self.reason_codes or [],
+            "evaluated_rules": self.evaluated_rules or [],
+            "grand_total": float(self.grand_total) if self.grand_total is not None else 0.0,
+            "policy_snapshot": self.policy_snapshot,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+

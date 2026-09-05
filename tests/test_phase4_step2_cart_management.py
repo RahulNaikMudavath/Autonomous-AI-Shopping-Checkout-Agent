@@ -73,6 +73,9 @@ def seeded_merchants_and_products(test_db_session: Session):
             db.add(p)
             db.commit()
             db.refresh(p)
+        else:
+            p.current_price = Decimal("15000.00")
+            db.commit()
 
         # Ensure inventory
         inv = db.query(InventoryModel).filter(InventoryModel.product_id == p.id).first()
